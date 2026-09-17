@@ -1,0 +1,3498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resume Forge — ATS-Friendly Resume Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+<style>
+/* =========================================================================
+   RESUME FORGE — GLASS EDITION
+   Monochrome glassmorphism. No hue anywhere in the UI: every surface is a
+   translucent white/black layer over a neutral grey field. Hierarchy is
+   carried by blur depth, stroke weight and luminance instead of colour.
+   ========================================================================= */
+
+:root{
+  /* base field */
+  --bg:#0b0b0c;
+  --bg-deep:#070708;
+
+  /* glass layers — ascending elevation */
+  --g1:rgba(255,255,255,.040);
+  --g2:rgba(255,255,255,.065);
+  --g3:rgba(255,255,255,.095);
+  --g4:rgba(255,255,255,.140);
+  --g-solid:rgba(22,22,24,.82);
+
+  /* strokes */
+  --stroke:rgba(255,255,255,.11);
+  --stroke-soft:rgba(255,255,255,.07);
+  --stroke-mid:rgba(255,255,255,.20);
+  --stroke-strong:rgba(255,255,255,.40);
+
+  /* type */
+  --text:#f4f4f5;
+  --text-dim:rgba(255,255,255,.62);
+  --text-faint:rgba(255,255,255,.36);
+
+  /* "accent" is pure light — never a hue */
+  --accent:#ffffff;
+  --accent-ink:#0a0a0b;
+
+  /* The one place colour is allowed. The ATS check is the only screen where
+     a glance has to tell you what to fix, so pass/improve/fix each get a hue.
+     Every hue below also differs in lightness, so it still reads for anyone
+     who can't separate red from green. */
+  --ok:#4ade80;        --ok-dim:rgba(74,222,128,.16);   --ok-line:rgba(74,222,128,.45);
+  --warn:#fbbf24;      --warn-dim:rgba(251,191,36,.16); --warn-line:rgba(251,191,36,.45);
+  --bad:#f87171;       --bad-dim:rgba(248,113,113,.16); --bad-line:rgba(248,113,113,.48);
+
+  --radius-sm:8px;
+  --radius-md:14px;
+  --radius-lg:20px;
+  --radius-pill:999px;
+
+  --font-ui:'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --blur-sm:blur(10px) saturate(0);
+  --blur-md:blur(18px) saturate(0);
+  --blur-lg:blur(34px) saturate(0);
+
+  --shadow-1:0 1px 2px rgba(0,0,0,.5);
+  --shadow-2:0 18px 44px rgba(0,0,0,.55);
+  --inset-hi:inset 0 1px 0 rgba(255,255,255,.12);
+
+  --topbar-h:auto;
+}
+
+*,*::before,*::after{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-ui);
+  font-size:14px;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+button{font-family:inherit;}
+::selection{background:rgba(255,255,255,.85);color:var(--accent-ink);}
+:focus-visible{outline:2px solid var(--stroke-strong);outline-offset:2px;border-radius:4px;}
+a{color:var(--text);}
+
+/* The light field behind the glass. Pure greyscale — gives the blur
+   something to refract without introducing colour. */
+.bg-field{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(46vw 46vw at 6% -4%,  rgba(255,255,255,.50), transparent 58%),
+    radial-gradient(30vw 30vw at 30% 22%, rgba(255,255,255,.26), transparent 56%),
+    radial-gradient(38vw 38vw at 98% 0%,  rgba(255,255,255,.34), transparent 56%),
+    radial-gradient(34vw 34vw at 12% 58%, rgba(255,255,255,.20), transparent 56%),
+    radial-gradient(56vw 42vw at 76% 108%,rgba(255,255,255,.28), transparent 60%),
+    radial-gradient(30vw 30vw at 52% 74%, rgba(255,255,255,.14), transparent 58%),
+    linear-gradient(168deg, #232326 0%, #141416 42%, var(--bg) 74%, var(--bg-deep) 100%);
+}
+.bg-field::after{
+  /* fine grain so large flat areas don't band */
+  content:'';position:absolute;inset:0;opacity:.20;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/><feColorMatrix type='saturate' values='0'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='.55'/></svg>");
+}
+
+/* scrollbars */
+*{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.18) transparent;}
+*::-webkit-scrollbar{width:9px;height:9px;}
+*::-webkit-scrollbar-track{background:transparent;}
+*::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:8px;border:2px solid transparent;background-clip:padding-box;}
+*::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.30);background-clip:padding-box;}
+
+/* reusable glass primitive */
+.glass{
+  background:var(--g1);
+  -webkit-backdrop-filter:var(--blur-md);
+  backdrop-filter:var(--blur-md);
+  border:1px solid var(--stroke);
+  box-shadow:var(--inset-hi);
+}
+
+/* ============================= APP SHELL ============================= */
+#app{
+  position:relative;z-index:1;
+  height:100dvh;
+  display:grid;
+  grid-template-rows:auto 1fr;
+  overflow:hidden;
+}
+
+/* ---------- Topbar ---------- */
+.topbar{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding:10px 16px;
+  background:rgba(255,255,255,.07);
+  -webkit-backdrop-filter:var(--blur-lg);
+  backdrop-filter:var(--blur-lg);
+  border-bottom:1px solid var(--stroke);
+  box-shadow:var(--inset-hi), 0 8px 30px rgba(0,0,0,.35);
+  z-index:20;
+  flex-wrap:wrap;
+}
+.brand{
+  display:flex;align-items:center;gap:10px;
+  font-weight:700;font-size:15px;letter-spacing:-.01em;white-space:nowrap;
+}
+.brand-mark{
+  width:32px;height:32px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(145deg, rgba(255,255,255,.34), rgba(255,255,255,.07));
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  border:1px solid var(--stroke-mid);
+  display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:13px;font-weight:700;letter-spacing:-.02em;
+  box-shadow:var(--inset-hi), 0 4px 14px rgba(0,0,0,.4);
+}
+.brand small{
+  display:block;font-weight:450;font-size:10.5px;color:var(--text-faint);letter-spacing:0;
+}
+.topbar-spacer{flex:1;min-width:0;}
+
+.ats-badge{
+  display:flex;align-items:center;gap:9px;
+  padding:5px 13px 5px 5px;
+  background:var(--g2);
+  -webkit-backdrop-filter:var(--blur-md);backdrop-filter:var(--blur-md);
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-pill);
+  cursor:pointer;
+  box-shadow:var(--inset-hi);
+  transition:border-color .18s, background .18s;
+}
+.ats-badge:hover{border-color:var(--stroke-mid);background:var(--g3);}
+.ats-ring{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:conic-gradient(rgba(255,255,255,.9) calc(var(--pct,0)*1%), rgba(255,255,255,.14) 0);
+  flex-shrink:0;
+}
+.ats-ring span{
+  width:21px;height:21px;border-radius:50%;
+  background:rgba(18,18,20,.94);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text);font-size:9.5px;font-weight:700;
+}
+.ats-badge-label{font-size:11.5px;color:var(--text-dim);white-space:nowrap;}
+.ats-badge-label b{color:var(--text);font-weight:600;}
+
+.topbar-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;}
+
+.btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:8px 13px;
+  border-radius:10px;
+  border:1px solid var(--stroke);
+  background:var(--g2);
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  color:var(--text);
+  font-size:12.5px;font-weight:550;
+  cursor:pointer;
+  white-space:nowrap;
+  box-shadow:var(--inset-hi);
+  transition:background .16s, border-color .16s, transform .08s;
+}
+.btn:hover{background:var(--g3);border-color:var(--stroke-mid);}
+.btn:active{transform:translateY(1px);}
+.btn svg{width:14px;height:14px;flex-shrink:0;}
+.btn-primary{
+  background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.80));
+  border-color:rgba(255,255,255,.6);
+  color:var(--accent-ink);
+  font-weight:650;
+  box-shadow:0 4px 18px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.9);
+}
+.btn-primary:hover{background:linear-gradient(180deg,#fff,rgba(255,255,255,.88));}
+.btn-ghost{background:transparent;border-color:transparent;box-shadow:none;}
+.btn-ghost:hover{background:var(--g2);border-color:var(--stroke-soft);}
+.btn-sm{padding:6px 10px;font-size:11.5px;}
+.btn-icon{padding:8px;}
+.btn-danger-outline{color:var(--text-dim);border-color:var(--stroke);background:transparent;}
+.btn-danger-outline:hover{background:rgba(255,255,255,.10);color:var(--text);}
+.btn .btn-txt{display:inline;}
+
+/* ---------- Main split layout ---------- */
+.workspace{
+  display:grid;
+  grid-template-columns:minmax(340px, 440px) 1fr;
+  overflow:hidden;
+  min-height:0;
+}
+
+/* ---------- Editor pane ---------- */
+.editor-pane{
+  display:flex;flex-direction:column;
+  background:rgba(255,255,255,.028);
+  -webkit-backdrop-filter:var(--blur-md);backdrop-filter:var(--blur-md);
+  border-right:1px solid var(--stroke);
+  overflow:hidden;min-width:0;
+}
+.tabs{
+  display:flex;gap:4px;
+  padding:10px 12px 0;
+  border-bottom:1px solid var(--stroke);
+  overflow-x:auto;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+  position:relative;
+}
+.tabs::-webkit-scrollbar{display:none;}
+/* only shown once JS confirms there's more to scroll to, so it never
+   clips a tab label that already fits */
+.tabs.is-scrollable{
+  mask-image:linear-gradient(to right, #000 calc(100% - 26px), transparent);
+  -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 26px), transparent);
+}
+.tab-btn{
+  padding:9px 14px;
+  font-size:12.5px;font-weight:550;
+  color:var(--text-faint);
+  background:transparent;
+  border:1px solid transparent;border-bottom:none;
+  cursor:pointer;
+  border-radius:10px 10px 0 0;
+  white-space:nowrap;
+  transition:.16s;
+}
+.tab-btn:hover{color:var(--text-dim);background:var(--g1);}
+.tab-btn.active{
+  color:var(--text);
+  background:var(--g3);
+  border-color:var(--stroke);
+  box-shadow:var(--inset-hi);
+}
+
+.tab-panels{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px;min-height:0;}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ---------- Cards / fields ---------- */
+.card{
+  background:var(--g1);
+  -webkit-backdrop-filter:var(--blur-md);backdrop-filter:var(--blur-md);
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-md);
+  padding:14px;
+  margin-bottom:12px;
+  box-shadow:var(--inset-hi);
+}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.card-title{
+  font-size:12.5px;font-weight:600;letter-spacing:-.01em;
+  color:var(--text);
+  display:flex;align-items:center;gap:8px;
+}
+.card-title .dot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.55);flex-shrink:0;}
+
+.field{margin-bottom:11px;}
+.field:last-child{margin-bottom:0;}
+.field label{display:block;font-size:11.5px;font-weight:500;color:var(--text-dim);margin-bottom:5px;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.field-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+
+input[type=text],input[type=email],input[type=tel],input[type=url],input[type=month],input[type=date],textarea,select{
+  width:100%;
+  background:rgba(255,255,255,.055);
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  border:1px solid var(--stroke);
+  color:var(--text);
+  padding:9px 11px;
+  border-radius:9px;
+  font-size:13px;
+  font-family:inherit;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+  transition:border-color .16s, background .16s;
+  min-width:0;
+}
+input::placeholder,textarea::placeholder{color:var(--text-faint);}
+input:hover,textarea:hover,select:hover{border-color:var(--stroke-mid);}
+input:focus,textarea:focus,select:focus{
+  border-color:var(--stroke-strong);
+  background:rgba(255,255,255,.10);
+  outline:none;
+}
+textarea{resize:vertical;min-height:64px;line-height:1.55;}
+select{
+  cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0L5 6L10 0Z' fill='rgba(255,255,255,.55)'/></svg>");
+  background-repeat:no-repeat;background-position:right 11px center;padding-right:28px;
+}
+select option{background:#151517;color:var(--text);}
+.hint{font-size:10.5px;color:var(--text-faint);margin-top:4px;line-height:1.45;}
+.checkbox-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-dim);}
+.checkbox-row input{width:auto;accent-color:#fff;}
+
+/* entry blocks */
+.entry{
+  border:1px solid var(--stroke-soft);
+  border-radius:12px;
+  padding:12px;margin-bottom:10px;
+  background:rgba(255,255,255,.045);
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  position:relative;
+  box-shadow:var(--inset-hi);
+}
+.entry-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
+.entry-label{font-size:11.5px;font-weight:600;color:var(--text-dim);}
+.entry-tools{display:flex;gap:4px;flex-shrink:0;}
+.icon-btn{
+  width:26px;height:26px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:8px;border:1px solid transparent;
+  background:transparent;color:var(--text-faint);cursor:pointer;
+  transition:.15s;
+}
+.icon-btn:hover{background:var(--g3);color:var(--text);border-color:var(--stroke-soft);}
+.icon-btn.danger:hover{background:rgba(255,255,255,.14);color:#fff;}
+.icon-btn svg{width:13px;height:13px;}
+
+.add-entry-btn{
+  width:100%;padding:11px;
+  border:1px dashed var(--stroke-mid);
+  border-radius:11px;
+  background:rgba(255,255,255,.02);
+  color:var(--text-dim);
+  font-size:12.5px;font-weight:550;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  transition:.16s;
+}
+.add-entry-btn:hover{border-color:var(--stroke-strong);color:var(--text);background:rgba(255,255,255,.07);}
+.add-entry-btn svg{width:14px;height:14px;}
+
+/* section order list */
+.order-list{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:7px;}
+.order-item{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  background:rgba(255,255,255,.05);
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  border:1px solid var(--stroke);
+  border-radius:11px;
+  padding:8px 9px 8px 7px;
+  font-size:12.5px;font-weight:550;
+  cursor:grab;
+  box-shadow:var(--inset-hi);
+}
+.order-item.sortable-ghost{opacity:.3;}
+.order-item .grip{color:var(--text-faint);display:flex;flex-shrink:0;}
+.order-item .grip svg{width:14px;height:14px;}
+.order-item .name{flex:1;min-width:60px;}
+.order-item .updn{display:flex;gap:2px;flex-shrink:0;}
+
+/* per-section size stepper */
+.sec-size{
+  display:flex;align-items:center;gap:1px;flex-shrink:0;
+  background:rgba(255,255,255,.05);
+  border:1px solid var(--stroke-soft);
+  border-radius:var(--radius-pill);
+  padding:2px;
+}
+.sec-size button{
+  width:20px;height:20px;border:none;background:transparent;color:var(--text-dim);
+  border-radius:50%;cursor:pointer;font-size:13px;line-height:1;
+  display:flex;align-items:center;justify-content:center;font-weight:600;
+}
+.sec-size button:hover{background:rgba(255,255,255,.15);color:#fff;}
+.sec-size .val{
+  font-size:10px;color:var(--text-faint);min-width:30px;text-align:center;
+  font-variant-numeric:tabular-nums;font-weight:600;
+}
+
+/* ---------- Design controls ---------- */
+.swatch-grid{display:flex;gap:9px;flex-wrap:wrap;}
+.swatch{
+  width:36px;height:36px;border-radius:11px;
+  border:1px solid var(--stroke-mid);
+  cursor:pointer;position:relative;
+  box-shadow:var(--inset-hi), 0 3px 10px rgba(0,0,0,.35);
+  transition:.16s;
+}
+.swatch:hover{transform:translateY(-1px);}
+.swatch.active{border-color:#fff;box-shadow:0 0 0 2px rgba(255,255,255,.35), var(--inset-hi);}
+.swatch.active::after{
+  content:'';position:absolute;inset:0;
+  background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round'><path d='M5 13l4 4L19 7'/></svg>") center/14px no-repeat;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.8));
+}
+
+/* template browser */
+.tpl-toolbar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.tpl-search{flex:1;min-width:120px;position:relative;}
+.tpl-search input{padding-left:30px;font-size:12.5px;}
+.tpl-search svg{
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  width:13px;height:13px;color:var(--text-faint);pointer-events:none;
+}
+.tpl-count{font-size:10.5px;color:var(--text-faint);align-self:center;white-space:nowrap;}
+.filter-chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;}
+.chip{
+  font-size:10.5px;font-weight:550;padding:5px 10px;border-radius:var(--radius-pill);
+  border:1px solid var(--stroke-soft);background:rgba(255,255,255,.04);
+  color:var(--text-faint);cursor:pointer;white-space:nowrap;transition:.15s;
+}
+.chip:hover{color:var(--text-dim);border-color:var(--stroke);}
+.chip.active{background:rgba(255,255,255,.90);color:var(--accent-ink);border-color:#fff;}
+
+.tpl-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.tpl-card{
+  border:1px solid var(--stroke);
+  border-radius:13px;
+  padding:8px;cursor:pointer;
+  background:rgba(255,255,255,.045);
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  box-shadow:var(--inset-hi);
+  transition:.16s;
+  min-width:0;
+}
+.tpl-card:hover{border-color:var(--stroke-mid);background:rgba(255,255,255,.08);}
+.tpl-card.active{border-color:#fff;box-shadow:0 0 0 1.5px rgba(255,255,255,.4), var(--inset-hi);background:rgba(255,255,255,.11);}
+.tpl-thumb{
+  height:62px;border-radius:7px;background:rgba(255,255,255,.90);margin-bottom:7px;
+  display:flex;flex-direction:column;gap:3px;padding:6px;overflow:hidden;
+}
+.tpl-thumb .bar{height:4px;background:rgba(0,0,0,.18);border-radius:2px;flex-shrink:0;}
+.tpl-thumb .bar.w60{width:60%;}
+.tpl-thumb .bar.w40{width:40%;}
+.tpl-thumb .bar.w80{width:80%;}
+.tpl-thumb.thumb-twocol{flex-direction:row;}
+.tpl-thumb.thumb-twocol .side{width:30%;background:rgba(0,0,0,.10);border-radius:4px;height:100%;flex-shrink:0;}
+.tpl-thumb.thumb-twocol .main{flex:1;display:flex;flex-direction:column;gap:3px;padding-left:5px;min-width:0;}
+.tpl-thumb .band{height:14px;border-radius:3px;background:rgba(0,0,0,.72);margin:-6px -6px 4px;flex-shrink:0;}
+.tpl-name{font-size:11.5px;font-weight:600;line-height:1.25;overflow:hidden;text-overflow:ellipsis;}
+.tpl-desc{font-size:10px;color:var(--text-faint);margin-top:3px;line-height:1.35;}
+.tpl-empty{
+  grid-column:1/-1;text-align:center;padding:26px 10px;color:var(--text-faint);font-size:12px;
+  border:1px dashed var(--stroke);border-radius:12px;
+}
+
+.seg{
+  display:flex;
+  background:rgba(255,255,255,.05);
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  border:1px solid var(--stroke);border-radius:11px;padding:3px;gap:3px;
+  box-shadow:var(--inset-hi);
+}
+.seg button{
+  flex:1;padding:7px 4px;border:none;background:transparent;color:var(--text-dim);
+  border-radius:8px;font-size:11.5px;font-weight:550;cursor:pointer;transition:.15s;
+  min-width:0;
+}
+.seg button:hover{color:var(--text);background:rgba(255,255,255,.07);}
+.seg button.active{background:rgba(255,255,255,.92);color:var(--accent-ink);font-weight:650;}
+
+.font-option{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:10px 12px;border:1px solid var(--stroke);border-radius:11px;margin-bottom:7px;
+  cursor:pointer;
+  background:rgba(255,255,255,.04);
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  transition:.16s;
+}
+.font-option:hover{border-color:var(--stroke-mid);background:rgba(255,255,255,.07);}
+.font-option.active{border-color:#fff;background:rgba(255,255,255,.12);}
+.font-option .fname{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.font-option .fcheck{color:#fff;font-size:13px;opacity:0;flex-shrink:0;}
+.font-option.active .fcheck{opacity:1;}
+
+/* ---------- Manual size sliders ---------- */
+.slider-row{margin-bottom:14px;}
+.slider-row:last-child{margin-bottom:0;}
+.slider-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:7px;}
+.slider-top label{font-size:11.5px;font-weight:500;color:var(--text-dim);margin:0;}
+.slider-val{
+  font-size:11px;font-weight:650;color:var(--text);
+  font-variant-numeric:tabular-nums;
+  background:rgba(255,255,255,.08);
+  border:1px solid var(--stroke-soft);
+  padding:2px 8px;border-radius:var(--radius-pill);
+  white-space:nowrap;
+}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;
+  width:100%;height:20px;background:transparent;cursor:pointer;margin:0;display:block;
+}
+input[type=range]::-webkit-slider-runnable-track{
+  height:5px;border-radius:var(--radius-pill);
+  background:rgba(255,255,255,.12);
+  border:1px solid var(--stroke-soft);
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:16px;height:16px;border-radius:50%;margin-top:-6.5px;
+  background:linear-gradient(180deg,#fff,rgba(255,255,255,.78));
+  border:1px solid rgba(255,255,255,.7);
+  box-shadow:0 2px 8px rgba(0,0,0,.55);
+}
+input[type=range]::-moz-range-track{
+  height:5px;border-radius:var(--radius-pill);
+  background:rgba(255,255,255,.12);border:1px solid var(--stroke-soft);
+}
+input[type=range]::-moz-range-thumb{
+  width:15px;height:15px;border-radius:50%;
+  background:#fff;border:1px solid rgba(255,255,255,.7);
+  box-shadow:0 2px 8px rgba(0,0,0,.55);
+}
+input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(255,255,255,.3);}
+
+/* ---------- ATS panel ---------- */
+.score-hero{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  background:var(--g2);
+  -webkit-backdrop-filter:var(--blur-md);backdrop-filter:var(--blur-md);
+  border:1px solid var(--stroke);border-radius:var(--radius-md);
+  padding:18px;margin-bottom:14px;
+  box-shadow:var(--inset-hi);
+}
+.score-dial{
+  width:76px;height:76px;border-radius:50%;flex-shrink:0;
+  background:conic-gradient(var(--score-color, rgba(255,255,255,.9)) calc(var(--pct,0)*1%), rgba(255,255,255,.12) 0);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 6px 22px rgba(0,0,0,.45);
+}
+.score-dial span{
+  width:60px;height:60px;border-radius:50%;
+  background:rgba(16,16,18,.96);
+  -webkit-backdrop-filter:var(--blur-sm);backdrop-filter:var(--blur-sm);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;
+}
+.score-dial b{font-size:19px;font-variant-numeric:tabular-nums;}
+.score-dial small{font-size:9px;color:var(--text-faint);}
+.score-hero-text{min-width:0;flex:1;}
+.score-hero-text b{font-size:14px;display:block;margin-bottom:3px;}
+.score-hero-text p{margin:0;font-size:12px;color:var(--text-dim);line-height:1.5;}
+
+.check-item{
+  display:flex;gap:11px;align-items:flex-start;
+  padding:11px 12px;margin-bottom:6px;
+  border:1px solid var(--stroke-soft);
+  border-left:3px solid var(--stroke);
+  border-radius:10px;
+  background:rgba(255,255,255,.03);
+}
+.check-item:last-child{margin-bottom:0;}
+.check-item.is-fail{border-left-color:var(--bad);background:var(--bad-dim);border-color:var(--bad-line);}
+.check-item.is-warn{border-left-color:var(--warn);background:var(--warn-dim);border-color:var(--warn-line);}
+.check-item.is-pass{border-left-color:var(--ok);}
+.check-icon{
+  width:20px;height:20px;border-radius:50%;flex-shrink:0;margin-top:1px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;
+  border:1px solid var(--stroke);
+}
+.check-icon.pass{background:var(--ok);color:#052e16;border-color:var(--ok);}
+.check-icon.warn{background:var(--warn);color:#422006;border-color:var(--warn);}
+.check-icon.fail{background:var(--bad);color:#450a0a;border-color:var(--bad);}
+.check-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.fix-tag{
+  font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  padding:2px 7px;border-radius:var(--radius-pill);white-space:nowrap;
+}
+.fix-tag.now{background:var(--bad);color:#450a0a;}
+.fix-tag.next{background:var(--warn);color:#422006;}
+.ats-legend{
+  display:flex;gap:12px;flex-wrap:wrap;margin:-2px 0 12px;
+  font-size:10.5px;color:var(--text-dim);
+}
+.ats-legend span{display:inline-flex;align-items:center;gap:5px;}
+.ats-legend i{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.check-text{min-width:0;}
+.check-text b{font-size:12.5px;display:block;font-weight:600;}
+.check-text p{margin:3px 0 0;font-size:11.5px;color:var(--text-dim);line-height:1.5;}
+
+.kw-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.kw-tag{
+  font-size:11px;padding:4px 10px;border-radius:var(--radius-pill);
+  background:rgba(255,255,255,.06);border:1px solid var(--stroke-soft);color:var(--text-dim);
+}
+.kw-tag b{color:var(--text);}
+
+/* ---------- Preview pane ---------- */
+.preview-pane{
+  overflow:auto;
+  display:flex;flex-direction:column;align-items:center;
+  padding:18px 18px 70px;
+  position:relative;min-width:0;
+  background:rgba(0,0,0,.34);
+}
+.preview-toolbar{
+  position:sticky;top:0;z-index:5;
+  display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;
+  margin:0 auto 18px;
+  background:rgba(255,255,255,.07);
+  -webkit-backdrop-filter:var(--blur-lg);backdrop-filter:var(--blur-lg);
+  border:1px solid var(--stroke);
+  border-radius:var(--radius-pill);
+  padding:6px 8px 6px 14px;
+  box-shadow:var(--shadow-2), var(--inset-hi);
+  max-width:100%;
+}
+.preview-toolbar .lbl{font-size:11.5px;color:var(--text-dim);font-weight:550;white-space:nowrap;}
+.zoom-controls{display:flex;align-items:center;gap:2px;}
+.page-wrap{
+  /* keeps scroll height correct while #resume-page is transform-scaled */
+  display:flex;justify-content:center;width:100%;
+}
+
+/* ---------- page-boundary guide ---------- */
+/* A guide, not a hard limit — content is never clipped or hidden, this
+   just makes it obvious that it has spilled onto a second sheet before
+   you find out from a half-empty printed page. */
+.page-break-line{
+  position:absolute;left:0;right:0;
+  border-top:2px dashed rgba(0,0,0,.32);
+  pointer-events:none;
+}
+.page-break-line::after{
+  content:attr(data-label);
+  position:absolute;top:6px;right:14px;
+  font-family:var(--font-ui);
+  font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:rgba(0,0,0,.55);
+  background:rgba(255,255,255,.92);
+  padding:2px 8px;border-radius:var(--radius-pill);
+  border:1px solid rgba(0,0,0,.12);
+}
+.page-break-shade{
+  position:absolute;left:0;right:0;height:100%;
+  background:repeating-linear-gradient(135deg, rgba(0,0,0,.035) 0 8px, transparent 8px 16px);
+  pointer-events:none;
+}
+
+.page-guide{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:11px;font-weight:550;color:var(--text-dim);
+  padding:5px 12px;border-radius:var(--radius-pill);
+  border:1px solid var(--stroke-soft);background:rgba(255,255,255,.05);
+  white-space:nowrap;
+}
+.page-guide::before{
+  content:'';width:6px;height:6px;border-radius:50%;
+  background:rgba(255,255,255,.5);flex-shrink:0;
+}
+.page-guide.over{color:var(--warn);border-color:var(--warn-line);background:var(--warn-dim);}
+.page-guide.over::before{background:var(--warn);}
+
+/* ---------- Modal ---------- */
+.modal-overlay{
+  position:fixed;inset:0;
+  background:rgba(4,4,5,.62);
+  -webkit-backdrop-filter:blur(8px) saturate(0);backdrop-filter:blur(8px) saturate(0);
+  display:none;align-items:center;justify-content:center;z-index:100;padding:16px;
+}
+.modal-overlay.open{display:flex;}
+.modal{
+  background:rgba(30,30,33,.72);
+  -webkit-backdrop-filter:var(--blur-lg);backdrop-filter:var(--blur-lg);
+  border:1px solid var(--stroke-mid);
+  border-radius:var(--radius-lg);
+  width:100%;max-width:640px;max-height:88dvh;display:flex;flex-direction:column;
+  box-shadow:var(--shadow-2), var(--inset-hi);
+}
+.modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px;border-bottom:1px solid var(--stroke);}
+.modal-head h3{margin:0;font-size:15px;font-weight:600;}
+.modal-head p{margin:4px 0 0;font-size:12px;color:var(--text-dim);line-height:1.5;}
+.modal-body{padding:20px;overflow-y:auto;flex:1;min-height:0;}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--stroke);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+
+.dropzone{
+  border:1px dashed var(--stroke-mid);border-radius:14px;padding:22px 16px;text-align:center;
+  margin-bottom:14px;cursor:pointer;
+  background:rgba(255,255,255,.03);
+  transition:.16s;
+}
+.dropzone:hover{border-color:var(--stroke-strong);background:rgba(255,255,255,.07);}
+.dropzone svg{width:26px;height:26px;color:var(--text-faint);margin-bottom:8px;}
+.dropzone b{font-size:13px;display:block;font-weight:600;}
+.dropzone span{font-size:11.5px;color:var(--text-faint);}
+
+.parse-summary{
+  margin-top:14px;padding:12px 14px;border-radius:11px;
+  background:rgba(255,255,255,.07);
+  border:1px solid var(--stroke);
+  font-size:12px;color:var(--text-dim);display:none;line-height:1.55;
+}
+.parse-summary.show{display:block;}
+.parse-summary b{color:var(--text);}
+
+.toast{
+  position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
+  background:rgba(38,38,42,.82);
+  -webkit-backdrop-filter:var(--blur-lg);backdrop-filter:var(--blur-lg);
+  border:1px solid var(--stroke-mid);
+  padding:11px 18px;border-radius:var(--radius-pill);
+  font-size:12.5px;font-weight:550;
+  box-shadow:var(--shadow-2), var(--inset-hi);
+  z-index:200;opacity:0;
+  transition:opacity .22s ease, transform .22s ease;
+  pointer-events:none;display:flex;align-items:center;gap:9px;
+  max-width:calc(100vw - 32px);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast .dot{width:7px;height:7px;border-radius:50%;background:#fff;flex-shrink:0;}
+.toast.err .dot{background:transparent;border:1.5px solid rgba(255,255,255,.8);}
+
+.mobile-toggle{
+  display:none;position:fixed;bottom:18px;right:16px;z-index:50;
+  align-items:center;gap:7px;
+  box-shadow:0 10px 30px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+/* =========================================================================
+   THE RESUME PAGE
+   The page itself stays opaque white — it is a printed document, not glass.
+   Every size below is driven by a CSS variable so the sliders in the Design
+   tab can retune the page live without re-rendering the markup.
+   ========================================================================= */
+#resume-page{
+  position:relative;
+  width:var(--page-w, 794px);
+  min-height:var(--page-h, 1123px);
+  background:#ffffff;
+  color:#1a1a1a;
+  box-shadow:0 20px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.10);
+  transform-origin:top center;
+  border-radius:2px;
+
+  /* ---- user-tunable ---- */
+  --rsm-size:13.5px;      /* base text size   */
+  --rsm-lh:1.5;           /* line spacing     */
+  --rsm-gap:15px;         /* space between sections */
+  --rsm-head:1;           /* heading scale    */
+  --rsm-nsize:2.1;        /* name scale       */
+  --rsm-pad:52px;         /* page margin      */
+  --rsm-item-gap:11px;    /* space between entries */
+
+  /* ---- ink tones (greyscale only) ---- */
+  --rsm-accent:#2b2b2b;
+  --rsm-accent-soft:#5c5c5c;
+  --rsm-heading:#111111;
+  --rsm-text:#232323;
+  --rsm-muted:#6a6a6a;
+  --rsm-rule:rgba(0,0,0,.12);
+  --rsm-wash:#f4f4f4;
+
+  --rsm-font:'Helvetica Neue', Arial, sans-serif;
+  --skin-head:1;
+  --skin-name:1;
+
+  font-family:var(--rsm-font);
+  color:var(--rsm-text);
+  font-size:var(--rsm-size);
+  line-height:var(--rsm-lh);
+  padding:var(--rsm-pad) calc(var(--rsm-pad) * 1.1);
+}
+
+.rsm-header{margin-bottom:calc(var(--rsm-gap) * 1.05);}
+.rsm-name{
+  font-size:calc(1em * var(--rsm-nsize) * var(--skin-name));
+  font-weight:800;letter-spacing:-.01em;color:var(--rsm-heading);margin:0 0 3px;line-height:1.12;
+}
+.rsm-title{font-size:1.12em;color:var(--rsm-accent-soft);font-weight:600;margin:0 0 9px;}
+.rsm-contact-line{display:flex;flex-wrap:wrap;gap:3px 14px;font-size:.86em;color:var(--rsm-muted);}
+.rsm-contact-line span{display:inline-flex;align-items:center;gap:5px;}
+
+.rsm-section{margin-bottom:var(--rsm-gap);}
+.rsm-section:last-child{margin-bottom:0;}
+.rsm-heading{
+  font-size:calc(1em * var(--rsm-head) * var(--skin-head));
+  font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--rsm-heading);margin:0 0 8px;
+}
+
+/* per-section size, driven from the section list in the editor */
+.rsm-summary{font-size:calc(1em * var(--sec-summary,1));}
+.rsm-skills{font-size:calc(1em * var(--sec-skills,1));}
+.rsm-experience{font-size:calc(1em * var(--sec-experience,1));}
+.rsm-education{font-size:calc(1em * var(--sec-education,1));}
+.rsm-projects{font-size:calc(1em * var(--sec-projects,1));}
+
+/* dividers */
+.div-underline .rsm-heading{border-bottom:1.5px solid var(--rsm-accent);padding-bottom:4px;}
+.div-bar .rsm-heading{background:var(--rsm-accent);color:#fff;padding:4px 9px;border-radius:2px;}
+.div-minimal .rsm-heading{font-size:calc(.86em * var(--rsm-head) * var(--skin-head));color:var(--rsm-accent-soft);letter-spacing:.1em;}
+
+.rsm-summary p{margin:0;color:var(--rsm-text);}
+
+.rsm-skills-grid{display:flex;flex-direction:column;gap:4px;}
+.rsm-skill-row{font-size:.96em;}
+.rsm-skill-row b{color:var(--rsm-heading);}
+
+.rsm-item{margin-bottom:var(--rsm-item-gap);}
+.rsm-item:last-child{margin-bottom:0;}
+.rsm-item-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap;}
+.rsm-item-title{font-weight:700;color:var(--rsm-heading);font-size:1.02em;}
+.rsm-item-sub{color:var(--rsm-accent-soft);font-weight:600;font-size:.94em;}
+.rsm-item-meta{font-size:.84em;color:var(--rsm-muted);white-space:nowrap;font-weight:500;}
+.rsm-item ul{margin:5px 0 0;padding-left:17px;}
+.rsm-item li{margin-bottom:2.5px;}
+.rsm-item .rsm-desc{margin:4px 0 0;color:var(--rsm-text);}
+.rsm-proj-tech{font-size:.82em;color:var(--rsm-accent-soft);font-weight:600;margin-top:2px;}
+
+/* =========================================================================
+   TEMPLATE SYSTEM — 5 LAYOUTS x 10 SKINS = 50 TEMPLATES
+   .layout-* places things. .skin-* styles them. Both land on #resume-page.
+   ========================================================================= */
+
+/* ---------------- LAYOUTS ---------------- */
+
+/* single — plain stacked column, safest for parsers */
+.layout-single .rsm-header{text-align:left;}
+
+/* centered — centred header block over a single-column body */
+.layout-centered{padding-top:0;}
+.layout-centered .rsm-header{
+  border-bottom:3px solid var(--rsm-accent);
+  padding:calc(var(--rsm-pad) * .62) 0 16px;
+  text-align:center;
+}
+.layout-centered .rsm-title{letter-spacing:.04em;}
+.layout-centered .rsm-contact-line{justify-content:center;}
+.layout-centered .rsm-body{padding-top:18px;}
+
+/* banner — full-bleed ink band carrying the name, single-column body */
+.layout-banner{padding-top:0;}
+.layout-banner .rsm-header{
+  background:var(--rsm-accent);
+  color:#fff;
+  margin:0 calc(var(--rsm-pad) * -1.1) calc(var(--rsm-gap) * 1.2);
+  padding:calc(var(--rsm-pad) * .58) calc(var(--rsm-pad) * 1.1);
+}
+.layout-banner .rsm-name{color:#fff;}
+.layout-banner .rsm-title{color:rgba(255,255,255,.82);}
+.layout-banner .rsm-contact-line{color:rgba(255,255,255,.75);}
+.layout-banner .rsm-heading{color:var(--rsm-heading);}
+
+/* sidebar-left / sidebar-right — rail for contact + skills */
+.layout-sidebar-left .rsm-shell,
+.layout-sidebar-right .rsm-shell{display:grid;gap:0 28px;}
+.layout-sidebar-left .rsm-shell{grid-template-columns:215px 1fr;}
+.layout-sidebar-right .rsm-shell{grid-template-columns:1fr 215px;}
+.layout-sidebar-left .rsm-header,
+.layout-sidebar-right .rsm-header{grid-column:1 / -1;}
+.layout-sidebar-left .rsm-sidebar,
+.layout-sidebar-right .rsm-sidebar{
+  background:var(--rsm-wash);
+  padding:var(--rsm-pad) 20px var(--rsm-pad) calc(var(--rsm-pad) * 1.1);
+  margin:calc(var(--rsm-pad) * -1) 0 calc(var(--rsm-pad) * -1) calc(var(--rsm-pad) * -1.1);
+  border-right:1px solid var(--rsm-rule);
+}
+.layout-sidebar-left .rsm-sidebar{order:1;}
+.layout-sidebar-left .rsm-main{order:2;}
+.layout-sidebar-right .rsm-main{order:1;}
+.layout-sidebar-right .rsm-sidebar{
+  order:2;border-right:none;border-left:1px solid var(--rsm-rule);
+  padding:var(--rsm-pad) calc(var(--rsm-pad) * 1.1) var(--rsm-pad) 20px;
+  margin:calc(var(--rsm-pad) * -1) calc(var(--rsm-pad) * -1.1) calc(var(--rsm-pad) * -1) 0;
+}
+.layout-sidebar-left .rsm-sidebar .rsm-heading,
+.layout-sidebar-right .rsm-sidebar .rsm-heading{font-size:calc(.9em * var(--rsm-head) * var(--skin-head));}
+.layout-sidebar-left .rsm-contact-block,
+.layout-sidebar-right .rsm-contact-block{
+  display:flex;flex-direction:column;gap:6px;font-size:.86em;color:var(--rsm-muted);margin-bottom:18px;
+  word-break:break-word;
+}
+.layout-sidebar-left .rsm-main,
+.layout-sidebar-right .rsm-main{min-width:0;}
+.layout-sidebar-left .rsm-skill-row,
+.layout-sidebar-right .rsm-skill-row{display:block;margin-bottom:8px;}
+.layout-sidebar-left .rsm-skill-row b,
+.layout-sidebar-right .rsm-skill-row b{display:block;font-size:.92em;margin-bottom:2px;}
+
+/* ---------------- SKINS ---------------- */
+
+/* 1. minimal — restrained, maximum parseability */
+.skin-minimal .rsm-name{letter-spacing:-.005em;}
+.skin-minimal .rsm-heading{font-weight:700;}
+
+/* 2. corporate — formal, ruled, uppercase name */
+.skin-corporate .rsm-name{text-transform:uppercase;letter-spacing:.09em;font-weight:700;}
+.skin-corporate .rsm-heading{border-bottom:1px solid var(--rsm-accent);padding-bottom:5px;letter-spacing:.12em;}
+.skin-corporate.layout-single .rsm-header,
+.skin-corporate.layout-sidebar-left .rsm-header,
+.skin-corporate.layout-sidebar-right .rsm-header{border-bottom:2px solid var(--rsm-accent);padding-bottom:12px;}
+
+/* 3. tech — monospaced, developer-flavoured */
+.skin-tech{--rsm-font:'JetBrains Mono','Courier New',monospace;}
+.skin-tech .rsm-name{font-family:'JetBrains Mono',monospace;--skin-name:.88;}
+.skin-tech .rsm-name::before{content:'> ';color:var(--rsm-accent-soft);}
+.skin-tech .rsm-heading{font-family:'JetBrains Mono',monospace;}
+.skin-tech .rsm-heading::before{content:'// ';color:var(--rsm-accent-soft);font-weight:400;}
+.skin-tech.div-underline .rsm-heading{border-bottom-style:dashed;}
+.skin-tech .rsm-skill-row{
+  display:inline-block;background:var(--rsm-wash);border:1px solid var(--rsm-rule);border-radius:4px;
+  padding:2px 8px;margin:0 5px 5px 0;font-size:.86em;
+}
+.skin-tech .rsm-skills-grid{flex-direction:row;flex-wrap:wrap;}
+
+/* 4. elegant — refined serif */
+.skin-elegant{--rsm-font:Georgia,'Times New Roman',serif;}
+.skin-elegant .rsm-name{font-weight:400;letter-spacing:.005em;}
+.skin-elegant .rsm-heading{font-weight:400;font-style:italic;letter-spacing:.02em;text-transform:none;--skin-head:1.08;}
+.skin-elegant .rsm-item-title{font-weight:700;}
+
+/* 5. bold — heavy filled headings, high contrast */
+.skin-bold .rsm-name{font-weight:800;letter-spacing:-.02em;}
+.skin-bold .rsm-heading{
+  background:var(--rsm-accent);color:#fff;
+  padding:5px 10px;border-radius:2px;letter-spacing:.08em;border-bottom:none;
+}
+.skin-bold.div-underline .rsm-heading,
+.skin-bold.div-bar .rsm-heading,
+.skin-bold.div-minimal .rsm-heading{background:var(--rsm-accent);color:#fff;border:none;padding:5px 10px;}
+.skin-bold .rsm-item-title{font-weight:800;}
+
+/* 6. editorial — serif with a hairline rule riding above each heading */
+.skin-editorial{--rsm-font:Georgia,'Times New Roman',serif;}
+.skin-editorial .rsm-name{font-weight:700;letter-spacing:-.015em;--skin-name:1.06;}
+.skin-editorial .rsm-title{font-style:italic;font-weight:400;}
+.skin-editorial .rsm-heading{
+  border-top:2px solid var(--rsm-accent);border-bottom:none;
+  padding:6px 0 0;letter-spacing:.14em;text-transform:uppercase;--skin-head:.84;
+}
+.skin-editorial.div-bar .rsm-heading{background:none;color:var(--rsm-heading);border-top:2px solid var(--rsm-accent);padding:6px 0 0;}
+.skin-editorial .rsm-item-title{font-weight:700;}
+
+/* 7. swiss — tight grid sans, headings marked by a solid left rule */
+.skin-swiss .rsm-name{font-weight:700;letter-spacing:-.03em;--skin-name:1.1;}
+.skin-swiss .rsm-title{font-weight:500;}
+.skin-swiss .rsm-heading{
+  border-left:4px solid var(--rsm-accent);border-bottom:none;
+  padding:1px 0 1px 9px;letter-spacing:.02em;text-transform:uppercase;--skin-head:.88;
+}
+.skin-swiss.div-bar .rsm-heading{background:none;color:var(--rsm-heading);border-left:4px solid var(--rsm-accent);padding:1px 0 1px 9px;}
+.skin-swiss .rsm-item-meta{font-variant-numeric:tabular-nums;}
+
+/* 8. outline — every heading sits inside a hairline box */
+.skin-outline .rsm-name{font-weight:600;letter-spacing:.01em;}
+.skin-outline .rsm-heading{
+  border:1px solid var(--rsm-accent);border-radius:0;
+  padding:4px 9px;display:inline-block;letter-spacing:.1em;--skin-head:.85;
+}
+.skin-outline.div-bar .rsm-heading{background:none;color:var(--rsm-heading);border:1px solid var(--rsm-accent);padding:4px 9px;}
+.skin-outline .rsm-item{border-left:1px solid var(--rsm-rule);padding-left:11px;}
+.skin-outline .rsm-contact-line span{border:1px solid var(--rsm-rule);padding:1px 7px;}
+
+/* 9. compact — dense, for people with a lot to say */
+.skin-compact{--rsm-item-gap:7px;}
+.skin-compact .rsm-name{--skin-name:.86;font-weight:700;}
+.skin-compact .rsm-title{margin-bottom:5px;font-size:1em;}
+.skin-compact .rsm-header{margin-bottom:calc(var(--rsm-gap) * .7);}
+.skin-compact .rsm-section{margin-bottom:calc(var(--rsm-gap) * .72);}
+.skin-compact .rsm-heading{--skin-head:.82;margin-bottom:5px;letter-spacing:.1em;}
+.skin-compact .rsm-item ul{margin-top:3px;}
+.skin-compact .rsm-item li{margin-bottom:1px;}
+
+/* 10. academic — formal serif, double-ruled headings, centred name */
+.skin-academic{--rsm-font:'Times New Roman',Times,serif;}
+.skin-academic .rsm-name{font-weight:400;letter-spacing:.06em;text-transform:uppercase;--skin-name:.92;}
+.skin-academic .rsm-title{font-style:italic;color:var(--rsm-muted);font-weight:400;}
+.skin-academic .rsm-heading{
+  border-bottom:3px double var(--rsm-accent);padding-bottom:3px;
+  letter-spacing:.16em;font-weight:400;--skin-head:.9;
+}
+.skin-academic.div-bar .rsm-heading{background:none;color:var(--rsm-heading);border-bottom:3px double var(--rsm-accent);padding:0 0 3px;}
+.skin-academic .rsm-item-title{font-weight:700;}
+.skin-academic .rsm-item-sub{font-style:italic;font-weight:400;}
+
+/* ---------------- COVER LETTER ---------------- */
+/* The letter is the same sheet of paper wearing the same skin: it inherits
+   the ink ramp, the font and every sizing variable from the resume. */
+.doc-letter{display:flex;flex-direction:column;}
+.ltr-sender{margin-bottom:calc(var(--rsm-gap) * 1.4);}
+.ltr-sender .rsm-name{margin-bottom:2px;}
+.ltr-rule{border:none;border-top:1.5px solid var(--rsm-accent);margin:0 0 calc(var(--rsm-gap) * 1.2);}
+.ltr-date{color:var(--rsm-muted);font-size:.9em;margin-bottom:calc(var(--rsm-gap) * 1.1);}
+.ltr-recipient{margin-bottom:calc(var(--rsm-gap) * 1.2);line-height:1.45;}
+.ltr-recipient b{color:var(--rsm-heading);font-weight:700;display:block;}
+.ltr-recipient span{display:block;color:var(--rsm-muted);font-size:.94em;}
+.ltr-subject{
+  font-weight:700;color:var(--rsm-heading);
+  margin-bottom:calc(var(--rsm-gap) * 1.1);
+  font-size:calc(1em * var(--rsm-head) * var(--skin-head));
+  letter-spacing:.03em;
+}
+.ltr-greeting{margin:0 0 calc(var(--rsm-gap) * .8);color:var(--rsm-text);}
+.ltr-body{flex:0 0 auto;}   /* sign-off follows the body, not the page bottom */
+.ltr-body p{margin:0 0 calc(var(--rsm-gap) * .8);color:var(--rsm-text);}
+.ltr-body p:last-child{margin-bottom:0;}
+.ltr-signoff{margin-top:calc(var(--rsm-gap) * 1.4);color:var(--rsm-text);}
+.ltr-signoff b{display:block;margin-top:calc(var(--rsm-gap) * 1.6);color:var(--rsm-heading);font-weight:700;}
+.ltr-empty{color:var(--rsm-muted);font-style:italic;}
+
+/* skins that box or fill their headings do the same to the subject line */
+.skin-bold .ltr-subject{background:var(--rsm-accent);color:#fff;padding:5px 10px;border-radius:2px;}
+.skin-outline .ltr-subject{border:1px solid var(--rsm-accent);padding:4px 9px;display:inline-block;}
+.skin-swiss .ltr-subject{border-left:4px solid var(--rsm-accent);padding-left:9px;}
+.skin-editorial .ltr-subject{border-top:2px solid var(--rsm-accent);padding-top:6px;}
+.skin-academic .ltr-subject{border-bottom:3px double var(--rsm-accent);padding-bottom:3px;}
+.skin-tech .ltr-subject::before{content:'// ';color:var(--rsm-accent-soft);font-weight:400;}
+
+.doc-seg{padding:2px;}
+.doc-seg button{padding:5px 12px;font-size:11.5px;}
+
+/* =========================================================================
+   RESPONSIVE — usable from 320px up
+   ========================================================================= */
+
+/* below the two-pane threshold the editor and preview swap */
+@media (max-width:1000px){
+  .workspace{grid-template-columns:1fr;}
+  .editor-pane{border-right:none;}
+  .workspace.show-preview .editor-pane{display:none;}
+  .workspace:not(.show-preview) .preview-pane{display:none;}
+  .mobile-toggle{display:inline-flex;}
+  .preview-pane{padding-bottom:84px;}
+  .tab-panels{padding-bottom:84px;}   /* so the FAB never permanently covers the last field */
+}
+
+@media (max-width:1240px) and (min-width:1001px){
+  .field-row3{grid-template-columns:1fr 1fr;}
+}
+
+@media (max-width:760px){
+  .topbar{gap:10px;padding:9px 12px;}
+  .brand{font-size:14px;}
+  .ats-badge{order:3;}
+  .topbar-actions{gap:6px;}
+}
+
+@media (max-width:640px){
+  /* two tidy rows: identity + score, then the actions */
+  .topbar{flex-wrap:wrap;row-gap:8px;}
+  .topbar-spacer{display:none;}
+  .brand{flex:1;min-width:0;order:0;}
+  .ats-badge{order:1;}
+  .topbar-actions{order:2;width:100%;justify-content:space-between;}
+  .brand small{display:none;}
+  .btn .btn-txt{display:none;}
+  .btn{padding:9px;}
+  .btn svg{width:15px;height:15px;}
+  .btn-primary{padding:9px 12px;}
+  .btn-primary .btn-txt{display:inline;}
+  .tab-panels{padding:13px;}
+  .field-row3{grid-template-columns:1fr 1fr;}
+  .modal-head,.modal-body,.modal-foot{padding-left:16px;padding-right:16px;}
+}
+
+@media (max-width:520px){
+  .topbar{padding:8px 10px;gap:8px;}
+  .ats-badge{padding:4px;}
+  .ats-badge-label{display:none;}
+  .field-row,.field-row3{grid-template-columns:1fr;}
+  .score-hero{padding:14px;gap:13px;}
+  .score-dial{width:64px;height:64px;}
+  .score-dial span{width:50px;height:50px;}
+  .score-dial b{font-size:16px;}
+  .preview-pane{padding:14px 10px 84px;}
+}
+
+@media (max-width:420px){
+  .tpl-grid{grid-template-columns:1fr;}
+  .tpl-thumb{height:72px;}
+  .card{padding:12px;}
+  .tab-panels{padding:10px;padding-bottom:96px;}
+  .tab-btn{padding:8px 9px;font-size:11.5px;letter-spacing:-.005em;}
+  .order-item{font-size:12px;}
+}
+
+@media (max-width:360px){
+  body{font-size:13.5px;}
+  .topbar{padding:7px 8px;gap:7px;}
+  .brand{font-size:13px;gap:8px;}
+  .brand-mark{width:28px;height:28px;font-size:12px;}
+  .topbar-actions{gap:4px;}
+  .btn{padding:8px;border-radius:9px;}
+  .card{padding:10px;border-radius:12px;}
+  .tab-panels{padding:8px;}
+  .entry{padding:10px;}
+  .preview-toolbar{padding:5px 6px 5px 10px;gap:6px;}
+  .preview-toolbar .lbl{font-size:11px;}
+  .modal-head,.modal-body,.modal-foot{padding-left:13px;padding-right:13px;}
+  .modal-foot .btn{flex:1;justify-content:center;}
+  .sec-size{display:none;}
+}
+
+/* very small screens: let the whole shell scroll rather than clip */
+@media (max-width:420px), (max-height:520px){
+  body{overflow:auto;}
+  #app{height:auto;min-height:100dvh;}
+  .editor-pane{overflow:visible;}
+  .tab-panels{overflow:visible;}
+}
+
+/* people who prefer less motion get none of it */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:.01ms !important;animation-duration:.01ms !important;}
+}
+
+/* blur is expensive and unsupported in a few engines — fall back to solids */
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .topbar,.modal,.toast,.preview-toolbar{background:rgba(26,26,29,.97);}
+  .card,.entry,.tpl-card,.seg,.font-option,.order-item,.btn,.ats-badge{background:rgba(255,255,255,.08);}
+}
+
+/* ============================= PRINT ============================= */
+@media print{
+  @page{size:A4;margin:0;}
+  html,body{background:#fff !important;height:auto;overflow:visible;}
+  .bg-field{display:none !important;}
+  body *{visibility:hidden;}
+  #resume-page,#resume-page *{visibility:visible;}
+  #resume-page{
+    position:absolute;top:0;left:0;
+    box-shadow:none !important;border-radius:0;
+    transform:none !important;
+    /* real paper units, set from the chosen paper size */
+    width:var(--print-w, 210mm);
+    min-height:var(--print-h, 297mm);
+  }
+  .rsm-item,.rsm-section{break-inside:avoid;}
+}
+</style>
+</head>
+<body>
+<div class="bg-field" aria-hidden="true"></div>
+<div id="app">
+
+  <!-- ============================= TOPBAR ============================= -->
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-mark">RF</div>
+      <div>
+        Resume Forge
+        <small>ATS-friendly resume builder</small>
+      </div>
+    </div>
+
+    <div class="topbar-spacer"></div>
+
+    <div class="ats-badge" id="atsBadgeBtn" title="Open ATS health check">
+      <div class="ats-ring" id="topAtsRing" style="--pct:0"><span id="topAtsScore">–</span></div>
+      <div class="ats-badge-label">ATS score <b id="topAtsLabel">Not checked</b></div>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="btn" id="btnImport">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="btn-txt">Import CV</span>
+      </button>
+      <button class="btn" id="btnSaveJson">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        <span class="btn-txt">Save</span>
+      </button>
+      <button class="btn" id="btnLoadJson">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span class="btn-txt">Load</span>
+      </button>
+      <input type="file" id="loadJsonInput" accept=".json" hidden>
+      <button class="btn btn-primary" id="btnDownload">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span class="btn-txt">Download PDF</span>
+      </button>
+      <button class="btn btn-icon btn-ghost" id="btnPrint" title="Print, or save as PDF matching the visual template exactly">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================= WORKSPACE ============================= -->
+  <div class="workspace" id="workspace">
+
+    <!-- ---------------- EDITOR PANE ---------------- -->
+    <div class="editor-pane">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="content">Content</button>
+        <button class="tab-btn" data-tab="letter">Letter</button>
+        <button class="tab-btn" data-tab="design">Design</button>
+        <button class="tab-btn" data-tab="ats">ATS Check</button>
+      </div>
+
+      <div class="tab-panels">
+
+        <!-- ===== CONTENT TAB ===== -->
+        <div class="tab-panel active" id="panel-content">
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Personal Details</div></div>
+            <div class="field-row">
+              <div class="field"><label>Full name</label><input type="text" data-path="personal.name" placeholder="Jordan Ali"></div>
+              <div class="field"><label>Job title / headline</label><input type="text" data-path="personal.title" placeholder="Senior Product Manager"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label>Email</label><input type="email" data-path="personal.email" placeholder="jordan@email.com"></div>
+              <div class="field"><label>Phone</label><input type="tel" data-path="personal.phone" placeholder="+1 (555) 010-2938"></div>
+            </div>
+            <div class="field-row">
+              <div class="field"><label>Location</label><input type="text" data-path="personal.location" placeholder="Karachi, Sindh"></div>
+              <div class="field"><label>LinkedIn / portfolio</label><input type="text" data-path="personal.linkedin" placeholder="linkedin.com/in/jordanali"></div>
+            </div>
+            <div class="field"><label>Website (optional)</label><input type="text" data-path="personal.website" placeholder="jordanali.dev"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Section Order</div></div>
+            <p class="hint" style="margin:-4px 0 10px;">Drag to reorder, or use the arrows. This controls how sections stack in the preview.</p>
+            <ul class="order-list" id="orderList"></ul>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Summary</div></div>
+            <div class="field">
+              <textarea data-path="summary" rows="4" placeholder="A concise 2–4 sentence pitch: your role, years of experience, top strengths, and what you're aiming for next."></textarea>
+              <div class="hint">Aim for 40–80 words. Avoid pronouns like "I" — ATS parsers prefer direct, keyword-rich phrasing.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Skills</div></div>
+            <div id="skillsList"></div>
+            <button class="add-entry-btn" data-add="skills">+ Add skill category</button>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Work Experience</div></div>
+            <div id="experienceList"></div>
+            <button class="add-entry-btn" data-add="experience">+ Add work experience</button>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Education</div></div>
+            <div id="educationList"></div>
+            <button class="add-entry-btn" data-add="education">+ Add education</button>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Projects</div></div>
+            <div id="projectsList"></div>
+            <button class="add-entry-btn" data-add="projects">+ Add project</button>
+          </div>
+
+        </div>
+
+        <!-- ===== DESIGN TAB ===== -->
+        <!-- ===== COVER LETTER TAB ===== -->
+        <div class="tab-panel" id="panel-letter">
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Who it's going to</div></div>
+            <div class="field-row">
+              <div class="field">
+                <label>Hiring manager</label>
+                <input type="text" data-lpath="recipient" placeholder="Dana Okafor">
+              </div>
+              <div class="field">
+                <label>Their title</label>
+                <input type="text" data-lpath="recipientTitle" placeholder="Head of Product">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Company</label>
+                <input type="text" data-lpath="company" placeholder="Northwind Labs">
+              </div>
+              <div class="field">
+                <label>Role you're applying for</label>
+                <input type="text" data-lpath="role" placeholder="Director of Product">
+              </div>
+            </div>
+            <div class="field">
+              <label>Company address <span style="color:var(--text-faint);font-weight:400;">(optional)</span></label>
+              <input type="text" data-lpath="address" placeholder="1200 Market St, Austin, TX">
+            </div>
+            <p class="hint">Leave the manager blank and the greeting falls back to a neutral one.</p>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>The letter</div></div>
+            <div class="field-row">
+              <div class="field">
+                <label>Date</label>
+                <input type="text" data-lpath="date" placeholder="Leave blank for today's date">
+              </div>
+              <div class="field">
+                <label>Greeting</label>
+                <input type="text" data-lpath="greeting" placeholder="Dear Dana,">
+              </div>
+            </div>
+            <div class="field">
+              <label>Body</label>
+              <textarea data-lpath="body" rows="14" placeholder="Leave a blank line between paragraphs."></textarea>
+              <p class="hint">Blank line between paragraphs. Three or four is the usual length — say why this role, what you've done that proves it, and what you want next.</p>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label>Sign-off</label>
+                <input type="text" data-lpath="signoff" placeholder="Sincerely,">
+              </div>
+              <div class="field">
+                <label>Signature name</label>
+                <input type="text" data-lpath="signature" placeholder="Defaults to your name">
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Letterhead</div></div>
+            <p class="hint" style="margin:-4px 0 9px;">The letter borrows the template, ink tone, font and paper size from the Design tab, so it arrives matching your resume.</p>
+            <label class="checkbox-row"><input type="checkbox" id="letterHeaderToggle"> Show my contact details at the top</label>
+          </div>
+
+          <button class="add-entry-btn" id="letterStarter">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
+            Fill with a starter draft
+          </button>
+        </div>
+
+        <div class="tab-panel" id="panel-design">
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title"><span class="dot"></span>Template</div>
+              <span class="tpl-count" id="tplCount"></span>
+            </div>
+            <div class="tpl-toolbar">
+              <div class="tpl-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+                <input type="text" id="tplSearch" placeholder="Search 50 templates">
+              </div>
+            </div>
+            <div class="filter-chips" id="tplLayoutChips"></div>
+            <div class="filter-chips" id="tplSkinChips"></div>
+            <div class="tpl-grid" id="templateGrid"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Ink tone</div></div>
+            <p class="hint" style="margin:-4px 0 9px;">Greyscale only — prints cleanly and never trips a colour-blind screen.</p>
+            <div class="swatch-grid" id="colorSwatches"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Typography</div></div>
+            <div id="fontOptions"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Paper size</div></div>
+            <div class="seg" id="paperSeg">
+              <button data-val="a4">A4</button>
+              <button data-val="letter">US Letter</button>
+              <button data-val="legal">Legal</button>
+            </div>
+            <p class="hint" id="paperNote" style="margin-top:8px;"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Density preset</div></div>
+            <p class="hint" style="margin:-4px 0 8px;">A starting point. Any slider below overrides it.</p>
+            <div class="seg" id="densitySeg">
+              <button data-val="compact">Compact</button>
+              <button data-val="normal">Normal</button>
+              <button data-val="relaxed">Relaxed</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div class="card-title"><span class="dot"></span>Size &amp; spacing</div>
+              <button class="btn btn-sm" id="resetSizing">Reset</button>
+            </div>
+            <div id="sizeSliders">
+              <div class="slider-row">
+                <div class="slider-top"><label for="szFont">Text size</label><span class="slider-val" id="szFontVal">13.5 px</span></div>
+                <input type="range" id="szFont" data-size="fontSize" min="8" max="20" step="0.5">
+              </div>
+              <div class="slider-row">
+                <div class="slider-top"><label for="szLine">Line spacing</label><span class="slider-val" id="szLineVal">1.50</span></div>
+                <input type="range" id="szLine" data-size="lineHeight" min="1" max="2.2" step="0.05">
+              </div>
+              <div class="slider-row">
+                <div class="slider-top"><label for="szHead">Heading size</label><span class="slider-val" id="szHeadVal">100%</span></div>
+                <input type="range" id="szHead" data-size="headingScale" min="0.7" max="1.8" step="0.02">
+              </div>
+              <div class="slider-row">
+                <div class="slider-top"><label for="szName">Your name</label><span class="slider-val" id="szNameVal">2.10×</span></div>
+                <input type="range" id="szName" data-size="nameScale" min="1.2" max="3.6" step="0.05">
+              </div>
+              <div class="slider-row">
+                <div class="slider-top"><label for="szGap">Space between sections</label><span class="slider-val" id="szGapVal">15 px</span></div>
+                <input type="range" id="szGap" data-size="sectionGap" min="2" max="44" step="1">
+              </div>
+              <div class="slider-row">
+                <div class="slider-top"><label for="szItem">Space between entries</label><span class="slider-val" id="szItemVal">11 px</span></div>
+                <input type="range" id="szItem" data-size="itemGap" min="0" max="30" step="1">
+              </div>
+              <div class="slider-row">
+                <div class="slider-top"><label for="szPad">Page margin</label><span class="slider-val" id="szPadVal">52 px</span></div>
+                <input type="range" id="szPad" data-size="pagePad" min="16" max="90" step="2">
+              </div>
+            </div>
+            <p class="hint" style="margin-top:12px;">Resize an individual section from the Content tab, under Section order.</p>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Section dividers</div></div>
+            <div class="seg" id="dividerSeg">
+              <button data-val="underline">Underline</button>
+              <button data-val="bar">Solid bar</button>
+              <button data-val="minimal">Minimal</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ===== ATS TAB ===== -->
+        <div class="tab-panel" id="panel-ats">
+          <div class="score-hero">
+            <div class="score-dial" id="atsDial" style="--pct:0"><span><b id="atsDialScore">0</b><small>/ 100</small></span></div>
+            <div class="score-hero-text">
+              <b id="atsHeroTitle">Run a health check</b>
+              <p id="atsHeroDesc">We'll scan your resume for missing info, formatting risks, and keyword strength.</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>What to fix</div></div>
+            <div class="ats-legend">
+              <span><i style="background:var(--bad)"></i>Fix first</span>
+              <span><i style="background:var(--warn)"></i>Worth improving</span>
+              <span><i style="background:var(--ok)"></i>Passing</span>
+            </div>
+            <div id="atsChecklist"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><div class="card-title"><span class="dot"></span>Keyword signal</div></div>
+            <p class="hint" style="margin:-4px 0 4px;">Most frequent meaningful words across your Experience, Skills &amp; Summary.</p>
+            <div class="kw-tags" id="kwTags"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ---------------- PREVIEW PANE ---------------- -->
+    <div class="preview-pane">
+      <div class="preview-toolbar">
+        <div class="seg doc-seg" id="docSeg">
+          <button data-doc="resume">Resume</button>
+          <button data-doc="letter">Letter</button>
+        </div>
+        <span class="page-guide" id="pageGuide" title="Dashed lines on the page mark where a new sheet starts. Nothing is ever cut off — this is just a heads-up before you print.">1 page</span>
+        <div class="zoom-controls">
+          <button class="btn btn-sm btn-icon" id="zoomOut">−</button>
+          <span class="lbl" id="zoomLabel" style="width:38px;text-align:center;">100%</span>
+          <button class="btn btn-sm btn-icon" id="zoomIn">+</button>
+          <button class="btn btn-sm" id="zoomFit" title="Scale the page to fit this pane">Fit</button>
+        </div>
+      </div>
+      <div class="page-wrap">
+        <div id="resume-page" class="layout-single skin-minimal div-underline">
+          <!-- rendered by JS -->
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<button class="btn btn-primary mobile-toggle" id="mobileToggle">Preview</button>
+
+<!-- ============================= IMPORT MODAL ============================= -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h3>Old CV → New CV</h3>
+        <p>Paste your existing resume text or upload a .txt file — we'll auto-map it into the editor.</p>
+      </div>
+      <button class="icon-btn" id="closeImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dropzone">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <b>Click to upload a .pdf, .txt or .md file</b>
+        <span>or drag and drop — we'll extract the text automatically</span>
+        <input type="file" id="fileInput" accept=".txt,.md,.pdf,application/pdf" hidden>
+      </div>
+      <div class="field">
+        <label>...or paste resume text directly</label>
+        <textarea id="importText" rows="10" placeholder="Paste your old resume content here. Include headings like 'Experience', 'Education', 'Skills' so we can find them."></textarea>
+      </div>
+      <div class="parse-summary" id="parseSummary"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="cancelImport">Cancel</button>
+      <button class="btn btn-primary" id="runParse">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></svg>
+        Auto-parse &amp; fill editor
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span class="dot"></span><span id="toastMsg"></span></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   1. STATE
+   ============================================================ */
+const STORAGE_KEY = "resumeForgeData_v2";
+
+/* Every measurement the user can move by hand. Values are plain numbers so
+   they can be dropped straight onto a range input and into the PDF writer. */
+const SIZE_DEFAULTS = {
+  fontSize:13.5,     // px, base body text
+  lineHeight:1.5,    // unitless
+  headingScale:1,    // multiplier on section headings
+  nameScale:2.1,     // multiplier on the name
+  sectionGap:15,     // px between sections
+  itemGap:11,        // px between entries inside a section
+  pagePad:52         // px page margin
+};
+const SIZE_LIMITS = {
+  fontSize:[8,20], lineHeight:[1,2.2], headingScale:[0.7,1.8],
+  nameScale:[1.2,3.6], sectionGap:[2,44], itemGap:[0,30], pagePad:[16,90]
+};
+const DENSITY_PRESETS = {
+  compact:{fontSize:11.5, lineHeight:1.32, headingScale:0.94, nameScale:1.9, sectionGap:10, itemGap:7,  pagePad:40},
+  normal: Object.assign({}, SIZE_DEFAULTS),
+  relaxed:{fontSize:15,   lineHeight:1.72, headingScale:1.06, nameScale:2.3, sectionGap:22, itemGap:15, pagePad:62}
+};
+const SECTION_SCALE_LIMITS = [0.75, 1.4];
+
+/* Paper stock. Screen sizes are CSS px at 96dpi; print sizes are the real
+   physical dimensions so a printed page is never silently rescaled. */
+const PAPERS = {
+  a4:     {label:"A4",        w:794, h:1123, printW:"210mm", printH:"297mm", page:"A4",     pdf:"a4",     note:"210 × 297 mm — the standard outside North America"},
+  letter: {label:"US Letter", w:816, h:1056, printW:"8.5in", printH:"11in",  page:"Letter", pdf:"letter", note:"8.5 × 11 in — the North American standard"},
+  legal:  {label:"Legal",     w:816, h:1344, printW:"8.5in", printH:"14in",  page:"Legal",  pdf:"legal",  note:"8.5 × 14 in — long documents, rarely used for resumes"}
+};
+function currentPaper(){ return PAPERS[state.meta.paper] || PAPERS.a4; }
+
+const defaultState = () => ({
+  meta:{
+    template:"single__minimal",
+    color:"ink",
+    font:"helvetica",
+    density:"normal",
+    divider:"underline",
+    paper:"a4",
+    doc:"resume",
+    custom:Object.assign({}, SIZE_DEFAULTS),
+    sectionScale:{summary:1, skills:1, experience:1, education:1, projects:1}
+  },
+  sectionOrder:["summary","skills","experience","education","projects"],
+  letter:{
+    recipient:"", recipientTitle:"", company:"", role:"", address:"",
+    date:"", greeting:"", signoff:"Sincerely,", signature:"",
+    showHeader:true,
+    body:""
+  },
+  personal:{
+    name:"Jordan Ali",
+    title:"Senior Product Manager",
+    email:"jordan.ali@email.com",
+    phone:"+1 (555) 010 2938",
+    location:"Karachi, Sindh",
+    linkedin:"linkedin.com/in/jordanali",
+    website:"jordanali.dev"
+  },
+  summary:"Product manager with 7+ years leading cross-functional teams to ship consumer and B2B SaaS products. Skilled in roadmap strategy, stakeholder alignment, and data-informed decision making. Known for turning ambiguous problems into shipped, measurable outcomes.",
+  skills:[
+    {id:uid(), category:"Product", items:"Roadmapping, User Research, A/B Testing, Prioritization, OKRs"},
+    {id:uid(), category:"Technical", items:"SQL, Figma, Jira, Amplitude, REST APIs"}
+  ],
+  experience:[
+    {id:uid(), company:"Northwind Labs", role:"Senior Product Manager", location:"Remote", start:"2022-01", end:"", current:true,
+      bullets:"Led a 12-person cross-functional pod that shipped a redesigned onboarding flow, lifting activation by 28%\nDefined and shipped quarterly roadmap for a $6M ARR product line\nPartnered with data science to launch an experimentation framework used across 5 teams"},
+    {id:uid(), company:"BrightPath", role:"Product Manager", location:"Austin, TX", start:"2019-03", end:"2021-12", current:false,
+      bullets:"Owned end-to-end lifecycle for a B2B billing product from concept to GA\nReduced churn 14% by identifying and fixing top 3 support friction points\nRan discovery interviews with 60+ customers to prioritize the 2020 roadmap"}
+  ],
+  education:[
+    {id:uid(), school:"University of Texas at Austin", degree:"B.S. in Business Administration", location:"Austin, TX", start:"2015", end:"2019", details:""}
+  ],
+  projects:[
+    {id:uid(), name:"Pulse — Habit Tracker", tech:"React, Node, Postgres", link:"github.com/jordanali/pulse",
+      description:"Side project habit-tracking app with 2k+ downloads\nDesigned and shipped full product from scratch, including onboarding and analytics"}
+  ]
+});
+
+let state;              // initialised below, once the theme tables exist
+let zoom = 1;
+let zoomMode = "fit";   // "fit" until the user touches the zoom buttons
+let activeTab = "content";
+
+function uid(){ return "id" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ============================================================
+   2. THEME DATA
+   ============================================================ */
+/* Greyscale only. Each tone is a full ink ramp, so a template reads as a
+   deliberate choice rather than the same grey five times over. */
+const COLOR_THEMES = {
+  ink:      {label:"Ink",       accent:"#111111", soft:"#4a4a4a", heading:"#000000", text:"#1c1c1c", muted:"#5e5e5e", rule:"rgba(0,0,0,.14)", wash:"#f2f2f2"},
+  graphite: {label:"Graphite",  accent:"#2f2f2f", soft:"#606060", heading:"#141414", text:"#242424", muted:"#6a6a6a", rule:"rgba(0,0,0,.12)", wash:"#f4f4f4"},
+  stone:    {label:"Stone",     accent:"#4a4a4a", soft:"#767676", heading:"#242424", text:"#2e2e2e", muted:"#757575", rule:"rgba(0,0,0,.10)", wash:"#f6f6f6"},
+  silver:   {label:"Silver",    accent:"#6b6b6b", soft:"#8e8e8e", heading:"#333333", text:"#363636", muted:"#808080", rule:"rgba(0,0,0,.09)", wash:"#f8f8f8"},
+  charcoal: {label:"Charcoal",  accent:"#1b1b1b", soft:"#3d3d3d", heading:"#000000", text:"#151515", muted:"#4f4f4f", rule:"rgba(0,0,0,.18)", wash:"#ededed"}
+};
+
+const FONTS = {
+  helvetica:{label:"Helvetica", css:"'Helvetica Neue', Helvetica, Arial, sans-serif"},
+  arial:    {label:"Arial", css:"Arial, Helvetica, sans-serif"},
+  inter:    {label:"Inter", css:"'Inter', Arial, sans-serif"},
+  roboto:   {label:"Roboto", css:"'Roboto', Arial, sans-serif"},
+  times:    {label:"Times New Roman", css:"'Times New Roman', Times, serif"}
+};
+
+/* ---------------------------------------------------------------
+   5 layouts x 10 skins = 50 templates.
+   Layout decides where things sit; skin decides how they look. The
+   two are independent, so every pairing is a real, distinct design.
+   --------------------------------------------------------------- */
+const LAYOUTS = {
+  single:         {label:"Single column", desc:"Clean single column, safest for ATS parsers"},
+  centered:       {label:"Centered",      desc:"Centred header block over a single-column body"},
+  banner:         {label:"Banner",        desc:"Full-width name band across the top of the page"},
+  "sidebar-left": {label:"Left rail",     desc:"Contact and skills in a left rail, body on the right"},
+  "sidebar-right":{label:"Right rail",    desc:"Body on the left, contact and skills in a right rail"}
+};
+const SKINS = {
+  minimal:  {label:"Minimalist", desc:"restrained and unfussy"},
+  corporate:{label:"Corporate",  desc:"formal, ruled, uppercase name"},
+  tech:     {label:"Developer",  desc:"monospaced, terminal-flavoured"},
+  elegant:  {label:"Elegant",    desc:"refined serif with italic headings"},
+  bold:     {label:"Bold",       desc:"solid heading blocks, high contrast"},
+  editorial:{label:"Editorial",  desc:"serif with a rule riding above each heading"},
+  swiss:    {label:"Swiss",      desc:"tight sans, headings marked by a left rule"},
+  outline:  {label:"Outline",    desc:"hairline boxes around every heading"},
+  compact:  {label:"Compact",    desc:"dense spacing, fits more on one page"},
+  academic: {label:"Academic",   desc:"formal serif with double-ruled headings"}
+};
+
+const TEMPLATE_NAMES = {
+  single:        ["Clean Slate","Structured Classic","Terminal","Serif Standard","Heavy Type","Broadsheet","Grid North","Framed","Dense Column","Thesis"],
+  centered:      ["Center Line","Boardroom","Console","Ivory","Marquee","Masthead","Axis","Passepartout","Tight Center","Convocation"],
+  banner:        ["Headline","Letterhead","Root Access","Overture","Blackout","Front Page","Bauhaus Band","Cartouche","Streamline","Matriculation"],
+  "sidebar-left":["Left Rail","Executive Rail","Dev Rail","Salon","Anchor","Column Inch","Zurich Rail","Blueprint","Ledger","Faculty"],
+  "sidebar-right":["Right Rail","Boardroom Right","Sidecar","Atelier","Counterweight","Endpaper","Helvetic Right","Portfolio Frame","Compact Right","Symposium"]
+};
+
+const TEMPLATES = {};
+const SKIN_KEYS = Object.keys(SKINS);
+Object.keys(LAYOUTS).forEach(layout=>{
+  SKIN_KEYS.forEach((skin, i)=>{
+    TEMPLATES[layout+"__"+skin] = {
+      label: TEMPLATE_NAMES[layout][i],
+      desc: SKINS[skin].label+" · "+LAYOUTS[layout].label,
+      longDesc: SKINS[skin].label+" style — "+SKINS[skin].desc+". "+LAYOUTS[layout].desc+".",
+      layout, skin
+    };
+  });
+});
+
+/* browse state for the template picker (not persisted — it's a view filter) */
+let tplFilter = {q:"", layout:"all", skin:"all"};
+
+const SECTION_LABELS = {
+  summary:"Summary", skills:"Skills", experience:"Work Experience", education:"Education", projects:"Projects"
+};
+
+/* Safe to build state now that the template, font and tone tables all exist. */
+state = loadFromStorage() || defaultState();
+
+/* ============================================================
+   3. PERSISTENCE
+   ============================================================ */
+function saveToStorage(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){ /* storage unavailable */ }
+}
+function loadFromStorage(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem("resumeForgeData_v1");
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    if(!parsed || !parsed.personal) return null;
+    return normaliseState(parsed);
+  }catch(e){ return null; }
+}
+
+/* Saves made before the ink tones and the sizing sliders existed are still
+   perfectly good resumes — fill in whatever they are missing. */
+function normaliseState(s){
+  s.meta = s.meta || {};
+  const m = s.meta;
+  if(!COLOR_THEMES[m.color]) m.color = "ink";
+  if(!TEMPLATES[m.template]) m.template = "single__minimal";
+  if(!FONTS[m.font]) m.font = "helvetica";
+  if(!DENSITY_PRESETS[m.density]) m.density = "normal";
+  if(!PAPERS[m.paper]) m.paper = "a4";
+  if(m.doc !== "letter") m.doc = "resume";
+
+  s.letter = Object.assign({
+    recipient:"", recipientTitle:"", company:"", role:"", address:"",
+    date:"", greeting:"", signoff:"Sincerely,", signature:"", showHeader:true, body:""
+  }, s.letter || {});
+
+  const base = DENSITY_PRESETS[m.density] || SIZE_DEFAULTS;
+  m.custom = Object.assign({}, base, m.custom || {});
+  Object.keys(SIZE_DEFAULTS).forEach(k=>{
+    const n = Number(m.custom[k]);
+    m.custom[k] = clampSize(k, isFinite(n) ? n : SIZE_DEFAULTS[k]);
+  });
+
+  m.sectionScale = m.sectionScale || {};
+  Object.keys(SECTION_LABELS).forEach(k=>{
+    const n = Number(m.sectionScale[k]);
+    m.sectionScale[k] = isFinite(n) ? clampScale(n) : 1;
+  });
+  return s;
+}
+function clampSize(key, v){
+  const lim = SIZE_LIMITS[key];
+  if(!lim) return v;
+  return Math.min(lim[1], Math.max(lim[0], v));
+}
+function clampScale(v){
+  return Math.min(SECTION_SCALE_LIMITS[1], Math.max(SECTION_SCALE_LIMITS[0], Math.round(v*100)/100));
+}
+let saveTimer=null;
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveToStorage, 350);
+}
+
+/* ============================================================
+   4. PATH GET/SET HELPERS
+   ============================================================ */
+function getByPath(obj, path){
+  return path.split(".").reduce((o,k)=> (o==null? undefined : o[k]), obj);
+}
+function setByPath(obj, path, value){
+  const keys = path.split(".");
+  let cur = obj;
+  for(let i=0;i<keys.length-1;i++){
+    cur = cur[keys[i]];
+  }
+  cur[keys[keys.length-1]] = value;
+}
+
+/* ============================================================
+   5. TOAST
+   ============================================================ */
+let toastTimer=null;
+function showToast(msg, isErr){
+  const t = document.getElementById("toast");
+  document.getElementById("toastMsg").textContent = msg;
+  t.classList.toggle("err", !!isErr);
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove("show"), 2400);
+}
+
+/* ============================================================
+   6. RENDER: EDITOR — STATIC CHROME (tabs, design controls)
+   ============================================================ */
+function tplThumb(t){
+  const isSidebar = t.layout.startsWith("sidebar");
+  const sideFirst = t.layout === "sidebar-left";
+  const centered  = t.layout === "centered";
+  const banner    = t.layout === "banner";
+  const headStyle = "height:6px;background:rgba(0,0,0,.72);" + (centered ? "margin:0 auto;" : "");
+
+  if(isSidebar){
+    return `<div class="tpl-thumb thumb-twocol"${sideFirst ? "" : ' style="flex-direction:row-reverse;"'}>
+      <div class="side"></div>
+      <div class="main"><div class="bar w80" style="${headStyle}"></div><div class="bar w60"></div><div class="bar w40"></div></div>
+    </div>`;
+  }
+  return `<div class="tpl-thumb">
+    ${banner ? '<div class="band"></div>' : `<div class="bar w60" style="${headStyle}"></div>`}
+    <div class="bar w40" style="${centered ? "margin:0 auto;" : ""}"></div>
+    <div class="bar w80"></div>
+    <div class="bar w60"></div>
+  </div>`;
+}
+
+function matchesFilter(key, t){
+  if(tplFilter.layout !== "all" && t.layout !== tplFilter.layout) return false;
+  if(tplFilter.skin   !== "all" && t.skin   !== tplFilter.skin)   return false;
+  const q = tplFilter.q.trim().toLowerCase();
+  if(!q) return true;
+  return (t.label+" "+t.longDesc+" "+key).toLowerCase().includes(q);
+}
+
+function renderTemplateChips(){
+  const lay = document.getElementById("tplLayoutChips");
+  const skn = document.getElementById("tplSkinChips");
+  if(!lay || !skn) return;
+  lay.innerHTML = `<button class="chip ${tplFilter.layout==="all"?"active":""}" data-layout="all">All layouts</button>` +
+    Object.entries(LAYOUTS).map(([k,l])=>
+      `<button class="chip ${tplFilter.layout===k?"active":""}" data-layout="${k}">${l.label}</button>`).join("");
+  skn.innerHTML = `<button class="chip ${tplFilter.skin==="all"?"active":""}" data-skin="all">All styles</button>` +
+    Object.entries(SKINS).map(([k,s])=>
+      `<button class="chip ${tplFilter.skin===k?"active":""}" data-skin="${k}">${s.label}</button>`).join("");
+}
+
+function renderTemplateGrid(){
+  const grid = document.getElementById("templateGrid");
+  const shown = Object.entries(TEMPLATES).filter(([key,t])=> matchesFilter(key,t));
+
+  const countEl = document.getElementById("tplCount");
+  if(countEl){
+    const total = Object.keys(TEMPLATES).length;
+    countEl.textContent = shown.length === total ? total+" designs" : shown.length+" of "+total;
+  }
+
+  if(!shown.length){
+    grid.innerHTML = `<div class="tpl-empty">Nothing matches that. Clear the search or pick a different filter.</div>`;
+    return;
+  }
+
+  grid.innerHTML = shown.map(([key,t])=>`
+    <div class="tpl-card ${state.meta.template===key?"active":""}" data-template="${key}" title="${esc(t.longDesc)}">
+      ${tplThumb(t)}
+      <div class="tpl-name">${esc(t.label)}</div>
+      <div class="tpl-desc">${esc(t.desc)}</div>
+    </div>`).join("");
+}
+
+function renderColorSwatches(){
+  const wrap = document.getElementById("colorSwatches");
+  wrap.innerHTML = Object.entries(COLOR_THEMES).map(([key,c])=>`
+    <div class="swatch ${state.meta.color===key?'active':''}" data-color="${key}" title="${c.label}" style="background:${c.accent};"></div>
+  `).join("");
+}
+
+function renderFontOptions(){
+  const wrap = document.getElementById("fontOptions");
+  wrap.innerHTML = Object.entries(FONTS).map(([key,f])=>`
+    <div class="font-option ${state.meta.font===key?'active':''}" data-font="${key}">
+      <span class="fname" style="font-family:${f.css}">${f.label}</span>
+      <span class="fcheck">✓</span>
+    </div>
+  `).join("");
+}
+
+/* --- manual size controls --- */
+const SIZE_FORMAT = {
+  fontSize:     v=> v.toFixed(1)+" px",
+  lineHeight:   v=> v.toFixed(2),
+  headingScale: v=> Math.round(v*100)+"%",
+  nameScale:    v=> v.toFixed(2)+"\u00d7",
+  sectionGap:   v=> Math.round(v)+" px",
+  itemGap:      v=> Math.round(v)+" px",
+  pagePad:      v=> Math.round(v)+" px"
+};
+const SIZE_INPUTS = {
+  fontSize:"szFont", lineHeight:"szLine", headingScale:"szHead", nameScale:"szName",
+  sectionGap:"szGap", itemGap:"szItem", pagePad:"szPad"
+};
+
+function renderSizeControls(){
+  Object.entries(SIZE_INPUTS).forEach(([key,id])=>{
+    const input = document.getElementById(id);
+    const label = document.getElementById(id+"Val");
+    if(!input) return;
+    const v = state.meta.custom[key];
+    if(document.activeElement !== input) input.value = v;
+    if(label) label.textContent = SIZE_FORMAT[key](v);
+  });
+}
+
+function renderSegControls(){
+  document.querySelectorAll("#densitySeg button").forEach(b=>{
+    b.classList.toggle("active", b.dataset.val===state.meta.density);
+  });
+  document.querySelectorAll("#dividerSeg button").forEach(b=>{
+    b.classList.toggle("active", b.dataset.val===state.meta.divider);
+  });
+  document.querySelectorAll("#paperSeg button").forEach(b=>{
+    b.classList.toggle("active", b.dataset.val===state.meta.paper);
+  });
+  const note = document.getElementById("paperNote");
+  if(note) note.textContent = currentPaper().note;
+}
+
+/* ============================================================
+   7. RENDER: SECTION ORDER LIST
+   ============================================================ */
+function renderOrderList(){
+  const list = document.getElementById("orderList");
+  list.innerHTML = state.sectionOrder.map((key,idx)=>{
+    const scale = state.meta.sectionScale[key] || 1;
+    return `
+    <li class="order-item" data-key="${key}">
+      <span class="grip"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="8" cy="6" r="1.5"/><circle cx="8" cy="12" r="1.5"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="16" cy="18" r="1.5"/></svg></span>
+      <span class="name">${SECTION_LABELS[key]}</span>
+      <span class="sec-size" title="Size of the ${SECTION_LABELS[key]} section">
+        <button data-scale="down" data-key="${key}" aria-label="Shrink ${SECTION_LABELS[key]}">−</button>
+        <span class="val">${Math.round(scale*100)}%</span>
+        <button data-scale="up" data-key="${key}" aria-label="Enlarge ${SECTION_LABELS[key]}">+</button>
+      </span>
+      <span class="updn">
+        <button class="icon-btn" data-move="up" data-idx="${idx}" ${idx===0?'disabled style="opacity:.25;cursor:default;"':''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 15 12 9 6 15"/></svg>
+        </button>
+        <button class="icon-btn" data-move="down" data-idx="${idx}" ${idx===state.sectionOrder.length-1?'disabled style="opacity:.25;cursor:default;"':''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9 12 15 18 9"/></svg>
+        </button>
+      </span>
+    </li>
+  `;}).join("");
+
+  if(window.Sortable && !list._sortableInit){
+    new Sortable(list, {
+      handle:".grip",
+      animation:150,
+      ghostClass:"sortable-ghost",
+      onEnd:function(){
+        const newOrder = Array.from(list.children).map(li=>li.dataset.key);
+        state.sectionOrder = newOrder;
+        renderOrderList();
+        renderPreview();
+        scheduleSave();
+      }
+    });
+    list._sortableInit = true;
+  }
+}
+
+/* ============================================================
+   8. RENDER: DYNAMIC LIST EDITORS (skills / experience / education / projects)
+   ============================================================ */
+function renderSkillsEditor(){
+  const wrap = document.getElementById("skillsList");
+  wrap.innerHTML = state.skills.map((s,i)=>`
+    <div class="entry" data-id="${s.id}">
+      <div class="entry-top">
+        <span class="entry-label">Category ${i+1}</span>
+        <div class="entry-tools">
+          <button class="icon-btn danger" data-remove="skills" data-id="${s.id}" title="Remove">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="field"><label>Category name</label><input type="text" data-list="skills" data-id="${s.id}" data-key="category" value="${esc(s.category)}" placeholder="e.g. Programming Languages"></div>
+      <div class="field"><label>Skills (comma separated)</label><input type="text" data-list="skills" data-id="${s.id}" data-key="items" value="${esc(s.items)}" placeholder="Python, SQL, Figma"></div>
+    </div>
+  `).join("") || `<p class="hint">No skill categories yet — add one below.</p>`;
+}
+
+function renderExperienceEditor(){
+  const wrap = document.getElementById("experienceList");
+  wrap.innerHTML = state.experience.map((x,i)=>`
+    <div class="entry" data-id="${x.id}">
+      <div class="entry-top">
+        <span class="entry-label">Role ${i+1}</span>
+        <div class="entry-tools">
+          <button class="icon-btn" data-move-entry="experience" data-dir="up" data-id="${x.id}" title="Move up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 15 12 9 6 15"/></svg></button>
+          <button class="icon-btn" data-move-entry="experience" data-dir="down" data-id="${x.id}" title="Move down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9 12 15 18 9"/></svg></button>
+          <button class="icon-btn danger" data-remove="experience" data-id="${x.id}" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Company</label><input type="text" data-list="experience" data-id="${x.id}" data-key="company" value="${esc(x.company)}" placeholder="Company Inc."></div>
+        <div class="field"><label>Role / Title</label><input type="text" data-list="experience" data-id="${x.id}" data-key="role" value="${esc(x.role)}" placeholder="Product Manager"></div>
+      </div>
+      <div class="field-row3">
+        <div class="field"><label>Location</label><input type="text" data-list="experience" data-id="${x.id}" data-key="location" value="${esc(x.location)}" placeholder="Remote"></div>
+        <div class="field"><label>Start date</label><input type="month" data-list="experience" data-id="${x.id}" data-key="start" value="${esc(x.start)}"></div>
+        <div class="field"><label>End date</label><input type="month" data-list="experience" data-id="${x.id}" data-key="end" value="${esc(x.end)}" ${x.current?'disabled':''}></div>
+      </div>
+      <div class="field"><label class="checkbox-row"><input type="checkbox" data-list="experience" data-id="${x.id}" data-key="current" data-bool="1" ${x.current?'checked':''}> I currently work here</label></div>
+      <div class="field"><label>Key achievements (one per line)</label>
+        <textarea data-list="experience" data-id="${x.id}" data-key="bullets" rows="4" placeholder="Led X to achieve Y, resulting in Z%">${esc(x.bullets)}</textarea>
+        <div class="hint">Start each line with an action verb + measurable result for best ATS keyword match.</div>
+      </div>
+    </div>
+  `).join("") || `<p class="hint">No experience yet — add your first role below.</p>`;
+}
+
+function renderEducationEditor(){
+  const wrap = document.getElementById("educationList");
+  wrap.innerHTML = state.education.map((x,i)=>`
+    <div class="entry" data-id="${x.id}">
+      <div class="entry-top">
+        <span class="entry-label">Education ${i+1}</span>
+        <div class="entry-tools">
+          <button class="icon-btn" data-move-entry="education" data-dir="up" data-id="${x.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 15 12 9 6 15"/></svg></button>
+          <button class="icon-btn" data-move-entry="education" data-dir="down" data-id="${x.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9 12 15 18 9"/></svg></button>
+          <button class="icon-btn danger" data-remove="education" data-id="${x.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+        </div>
+      </div>
+      <div class="field"><label>School / Institution</label><input type="text" data-list="education" data-id="${x.id}" data-key="school" value="${esc(x.school)}" placeholder="State University"></div>
+      <div class="field"><label>Degree</label><input type="text" data-list="education" data-id="${x.id}" data-key="degree" value="${esc(x.degree)}" placeholder="B.S. Computer Science"></div>
+      <div class="field-row3">
+        <div class="field"><label>Location</label><input type="text" data-list="education" data-id="${x.id}" data-key="location" value="${esc(x.location)}" placeholder="City, State"></div>
+        <div class="field"><label>Start year</label><input type="text" data-list="education" data-id="${x.id}" data-key="start" value="${esc(x.start)}" placeholder="2015"></div>
+        <div class="field"><label>End year</label><input type="text" data-list="education" data-id="${x.id}" data-key="end" value="${esc(x.end)}" placeholder="2019"></div>
+      </div>
+      <div class="field"><label>Details (optional — honors, GPA)</label><textarea data-list="education" data-id="${x.id}" data-key="details" rows="2" placeholder="Dean's List, GPA 3.8">${esc(x.details)}</textarea></div>
+    </div>
+  `).join("") || `<p class="hint">No education yet — add one below.</p>`;
+}
+
+function renderProjectsEditor(){
+  const wrap = document.getElementById("projectsList");
+  wrap.innerHTML = state.projects.map((x,i)=>`
+    <div class="entry" data-id="${x.id}">
+      <div class="entry-top">
+        <span class="entry-label">Project ${i+1}</span>
+        <div class="entry-tools">
+          <button class="icon-btn" data-move-entry="projects" data-dir="up" data-id="${x.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 15 12 9 6 15"/></svg></button>
+          <button class="icon-btn" data-move-entry="projects" data-dir="down" data-id="${x.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9 12 15 18 9"/></svg></button>
+          <button class="icon-btn danger" data-remove="projects" data-id="${x.id}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Project name</label><input type="text" data-list="projects" data-id="${x.id}" data-key="name" value="${esc(x.name)}" placeholder="Project Name"></div>
+        <div class="field"><label>Tech / tools used</label><input type="text" data-list="projects" data-id="${x.id}" data-key="tech" value="${esc(x.tech)}" placeholder="React, Node"></div>
+      </div>
+      <div class="field"><label>Link (optional)</label><input type="text" data-list="projects" data-id="${x.id}" data-key="link" value="${esc(x.link)}" placeholder="github.com/you/project"></div>
+      <div class="field"><label>Description (one bullet per line)</label><textarea data-list="projects" data-id="${x.id}" data-key="description" rows="3" placeholder="What it does and the impact/result">${esc(x.description)}</textarea></div>
+    </div>
+  `).join("") || `<p class="hint">No projects yet — add one below.</p>`;
+}
+
+function renderAllListEditors(){
+  renderSkillsEditor();
+  renderExperienceEditor();
+  renderEducationEditor();
+  renderProjectsEditor();
+}
+
+function esc(str){
+  return String(str==null?"":str).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+/* ============================================================
+   9. RENDER: RESUME PREVIEW
+   ============================================================ */
+function fmtDate(val){
+  if(!val) return "";
+  // month input yyyy-mm
+  const m = /^(\d{4})-(\d{2})$/.exec(val);
+  if(m){
+    const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return months[parseInt(m[2],10)-1] + " " + m[1];
+  }
+  return val;
+}
+
+function renderSection_summary(){
+  if(!state.summary || !state.summary.trim()) return "";
+  return `<section class="rsm-section rsm-summary"><h2 class="rsm-heading">Summary</h2><p>${esc(state.summary)}</p></section>`;
+}
+function renderSection_skills(){
+  const items = state.skills.filter(s=>s.category || s.items);
+  if(!items.length) return "";
+  return `<section class="rsm-section rsm-skills"><h2 class="rsm-heading">Skills</h2>
+    <div class="rsm-skills-grid">
+      ${items.map(s=>`<div class="rsm-skill-row">${s.category?`<b>${esc(s.category)}:</b> `:""}${esc(s.items)}</div>`).join("")}
+    </div></section>`;
+}
+function renderSection_experience(){
+  const items = state.experience.filter(x=>x.company||x.role);
+  if(!items.length) return "";
+  return `<section class="rsm-section rsm-experience"><h2 class="rsm-heading">Work Experience</h2>
+    ${items.map(x=>{
+      const bullets = (x.bullets||"").split("\n").map(b=>b.trim()).filter(Boolean);
+      const dateStr = [fmtDate(x.start), x.current?"Present":fmtDate(x.end)].filter(Boolean).join(" – ");
+      return `<div class="rsm-item">
+        <div class="rsm-item-top">
+          <div><span class="rsm-item-title">${esc(x.role)}</span>${x.company?` <span class="rsm-item-sub">· ${esc(x.company)}</span>`:""}</div>
+          <span class="rsm-item-meta">${[dateStr,x.location].filter(Boolean).join(" · ")}</span>
+        </div>
+        ${bullets.length? `<ul>${bullets.map(b=>`<li>${esc(b)}</li>`).join("")}</ul>` : ""}
+      </div>`;
+    }).join("")}
+  </section>`;
+}
+function renderSection_education(){
+  const items = state.education.filter(x=>x.school||x.degree);
+  if(!items.length) return "";
+  return `<section class="rsm-section rsm-education"><h2 class="rsm-heading">Education</h2>
+    ${items.map(x=>{
+      const dateStr=[x.start,x.end].filter(Boolean).join(" – ");
+      return `<div class="rsm-item">
+        <div class="rsm-item-top">
+          <div><span class="rsm-item-title">${esc(x.degree)}</span>${x.school?` <span class="rsm-item-sub">· ${esc(x.school)}</span>`:""}</div>
+          <span class="rsm-item-meta">${[dateStr,x.location].filter(Boolean).join(" · ")}</span>
+        </div>
+        ${x.details?`<p class="rsm-desc">${esc(x.details)}</p>`:""}
+      </div>`;
+    }).join("")}
+  </section>`;
+}
+function renderSection_projects(){
+  const items = state.projects.filter(x=>x.name);
+  if(!items.length) return "";
+  return `<section class="rsm-section rsm-projects"><h2 class="rsm-heading">Projects</h2>
+    ${items.map(x=>{
+      const bullets = (x.description||"").split("\n").map(b=>b.trim()).filter(Boolean);
+      return `<div class="rsm-item">
+        <div class="rsm-item-top">
+          <span class="rsm-item-title">${esc(x.name)}</span>
+          ${x.link?`<span class="rsm-item-meta">${esc(x.link)}</span>`:""}
+        </div>
+        ${x.tech?`<div class="rsm-proj-tech">${esc(x.tech)}</div>`:""}
+        ${bullets.length? `<ul>${bullets.map(b=>`<li>${esc(b)}</li>`).join("")}` + `</ul>` : ""}
+      </div>`;
+    }).join("")}
+  </section>`;
+}
+
+const SECTION_RENDERERS = {
+  summary:renderSection_summary, skills:renderSection_skills, experience:renderSection_experience,
+  education:renderSection_education, projects:renderSection_projects
+};
+
+function renderHeader(includeContact){
+  const p = state.personal;
+  const contactBits = [
+    p.email ? `<span>${esc(p.email)}</span>`:"",
+    p.phone ? `<span>${esc(p.phone)}</span>`:"",
+    p.location ? `<span>${esc(p.location)}</span>`:"",
+    p.linkedin ? `<span>${esc(p.linkedin)}</span>`:"",
+    p.website ? `<span>${esc(p.website)}</span>`:""
+  ].filter(Boolean).join("");
+  return `<div class="rsm-header">
+    <h1 class="rsm-name">${esc(p.name)||"Your Name"}</h1>
+    ${p.title?`<div class="rsm-title">${esc(p.title)}</div>`:""}
+    ${includeContact && contactBits ? `<div class="rsm-contact-line">${contactBits}</div>` : ""}
+  </div>`;
+}
+
+/* @page can't read a CSS variable, so the print rule is rewritten in a
+   dedicated style tag whenever the paper changes. */
+function applyPrintPaper(paper){
+  let tag = document.getElementById("printPaperStyle");
+  if(!tag){
+    tag = document.createElement("style");
+    tag.id = "printPaperStyle";
+    document.head.appendChild(tag);
+  }
+  tag.textContent = `@media print{ @page{ size:${paper.page}; margin:0; } }`;
+  const page = document.getElementById("resume-page");
+  page.style.setProperty("--print-w", paper.printW);
+  page.style.setProperty("--print-h", paper.printH);
+}
+
+/* ============================================================
+   9b. COVER LETTER
+   ============================================================ */
+function letterDate(){
+  const raw = (state.letter.date||"").trim();
+  if(raw) return raw;
+  return new Date().toLocaleDateString(undefined, {year:"numeric", month:"long", day:"numeric"});
+}
+function letterGreeting(){
+  const raw = (state.letter.greeting||"").trim();
+  if(raw) return raw;
+  const name = (state.letter.recipient||"").trim();
+  return name ? `Dear ${name},` : "Dear Hiring Manager,";
+}
+
+function renderLetter(){
+  const L = state.letter;
+  const p = state.personal;
+
+  const contactBits = [p.email,p.phone,p.location,p.linkedin,p.website]
+    .filter(Boolean).map(v=>`<span>${esc(v)}</span>`).join("");
+
+  const head = L.showHeader ? `<div class="ltr-sender">
+      <h1 class="rsm-name">${esc(p.name)||"Your Name"}</h1>
+      ${p.title?`<div class="rsm-title">${esc(p.title)}</div>`:""}
+      ${contactBits?`<div class="rsm-contact-line">${contactBits}</div>`:""}
+    </div><hr class="ltr-rule">` : "";
+
+  const recipientLines = [
+    L.recipient ? `<b>${esc(L.recipient)}</b>` : "",
+    L.recipientTitle ? `<span>${esc(L.recipientTitle)}</span>` : "",
+    L.company ? `<span>${esc(L.company)}</span>` : "",
+    L.address ? `<span>${esc(L.address)}</span>` : ""
+  ].filter(Boolean).join("");
+
+  const subject = L.role
+    ? `<div class="ltr-subject">Re: ${esc(L.role)}${L.company?` at ${esc(L.company)}`:""}</div>`
+    : "";
+
+  const paras = (L.body||"").split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean);
+  const body = paras.length
+    ? paras.map(t=>`<p>${esc(t).replace(/\n/g,"<br>")}</p>`).join("")
+    : `<p class="ltr-empty">Your letter goes here. Open the Letter tab to write it, or use the starter draft to get going.</p>`;
+
+  return `
+    ${head}
+    <div class="ltr-date">${esc(letterDate())}</div>
+    ${recipientLines?`<div class="ltr-recipient">${recipientLines}</div>`:""}
+    ${subject}
+    <p class="ltr-greeting">${esc(letterGreeting())}</p>
+    <div class="ltr-body">${body}</div>
+    <div class="ltr-signoff">
+      ${esc(L.signoff||"Sincerely,")}
+      <b>${esc((L.signature||"").trim() || p.name || "Your Name")}</b>
+    </div>`;
+}
+
+function renderPreview(){
+  const page = document.getElementById("resume-page");
+  const theme = COLOR_THEMES[state.meta.color];
+  const font = FONTS[state.meta.font];
+  const tpl = TEMPLATES[state.meta.template] || TEMPLATES["single__minimal"];
+
+  page.className = `layout-${tpl.layout} skin-${tpl.skin} div-${state.meta.divider}`;
+
+  // ink ramp
+  page.style.setProperty("--rsm-accent", theme.accent);
+  page.style.setProperty("--rsm-accent-soft", theme.soft);
+  page.style.setProperty("--rsm-heading", theme.heading);
+  page.style.setProperty("--rsm-text", theme.text);
+  page.style.setProperty("--rsm-muted", theme.muted);
+  page.style.setProperty("--rsm-rule", theme.rule);
+  page.style.setProperty("--rsm-wash", theme.wash);
+  page.style.setProperty("--rsm-font", font.css);
+
+  // paper stock
+  const paper = currentPaper();
+  page.style.setProperty("--page-w", paper.w+"px");
+  page.style.setProperty("--page-h", paper.h+"px");
+  applyPrintPaper(paper);
+
+  // everything the sliders control
+  const c = state.meta.custom;
+  page.style.setProperty("--rsm-size", c.fontSize+"px");
+  page.style.setProperty("--rsm-lh", c.lineHeight);
+  page.style.setProperty("--rsm-head", c.headingScale);
+  page.style.setProperty("--rsm-nsize", c.nameScale);
+  page.style.setProperty("--rsm-gap", c.sectionGap+"px");
+  page.style.setProperty("--rsm-item-gap", c.itemGap+"px");
+  page.style.setProperty("--rsm-pad", c.pagePad+"px");
+
+  // per-section sizes
+  Object.entries(state.meta.sectionScale).forEach(([k,v])=>{
+    page.style.setProperty("--sec-"+k, v);
+  });
+
+  const isSidebar = tpl.layout.startsWith("sidebar");
+
+  if(state.meta.doc === "letter"){
+    // a letter is one column of prose, so only the skin carries over
+    page.className = `doc-letter skin-${tpl.skin} div-${state.meta.divider}`;
+    page.innerHTML = renderLetter();
+    if(zoomMode === "fit") fitZoom();
+    updatePageGuide();
+    return;
+  }
+
+  if(isSidebar){
+    const p = state.personal;
+    const contactList = [
+      p.email, p.phone, p.location, p.linkedin, p.website
+    ].filter(Boolean).map(v=>`<div>${esc(v)}</div>`).join("");
+    const mainOrder = state.sectionOrder.filter(k=>k!=="skills");
+    page.innerHTML = `<div class="rsm-shell">
+      ${renderHeader(false)}
+      <div class="rsm-sidebar">
+        <div class="rsm-contact-block">${contactList}</div>
+        ${renderSection_skills()}
+      </div>
+      <div class="rsm-main">
+        ${mainOrder.map(k=>SECTION_RENDERERS[k]()).join("")}
+      </div>
+    </div>`;
+  } else {
+    page.innerHTML = `
+      ${renderHeader(true)}
+      <div class="rsm-body">
+        ${state.sectionOrder.map(k=>SECTION_RENDERERS[k]()).join("")}
+      </div>
+    `;
+  }
+
+  if(zoomMode === "fit") fitZoom();
+  updatePageGuide();
+}
+
+/* Draws dashed lines at every paper-height interval and reports how many
+   sheets the current content spans. Purely a screen aid — print and PDF
+   already paginate correctly on their own regardless of what this shows. */
+function updatePageGuide(){
+  const page = document.getElementById("resume-page");
+  const badge = document.getElementById("pageGuide");
+  if(!page || !badge) return;
+
+  page.querySelectorAll(".page-break-line, .page-break-shade").forEach(el=>el.remove());
+
+  const paper = currentPaper();
+  const pageH = paper.h;
+  // a hair of tolerance so content that lands exactly on the line doesn't
+  // get reported as spilling by a fraction of a pixel
+  const pages = Math.max(1, Math.ceil((page.scrollHeight - 0.5) / pageH));
+
+  for(let i=1; i<pages; i++){
+    const line = document.createElement("div");
+    line.className = "page-break-line";
+    line.style.top = (pageH*i) + "px";
+    line.dataset.label = `Page ${i+1} starts here`;
+    page.appendChild(line);
+  }
+  if(pages > 1){
+    const shade = document.createElement("div");
+    shade.className = "page-break-shade";
+    shade.style.top = (pageH*(pages-1)) + "px";
+    shade.style.height = (page.scrollHeight - pageH*(pages-1)) + "px";
+    page.appendChild(shade);
+  }
+
+  badge.textContent = pages<=1 ? "1 page" : `${pages} pages`;
+  badge.classList.toggle("over", pages>1);
+}
+
+/* ============================================================
+   10. ATS HEALTH CHECK
+   ============================================================ */
+const STOPWORDS = new Set("the a an and or but of to in on for with at by from as is are was were be been being this that these those i you he she it we they my your our their will would can could should may might not no yes so than then there here into over under out up down about after before above below between".split(" "));
+
+function computeATS(){
+  const checks=[];
+  const p = state.personal;
+
+  // contact completeness
+  const contactFields=[["Full name",p.name],["Email",p.email],["Phone",p.phone],["Location",p.location]];
+  const missingContact = contactFields.filter(([,v])=>!v || !v.trim());
+  checks.push({
+    status: missingContact.length===0?"pass":(missingContact.length<2?"warn":"fail"),
+    title:"Contact information",
+    desc: missingContact.length===0 ? "Name, email, phone and location are all present." : `Missing: ${missingContact.map(m=>m[0]).join(", ")}.`
+  });
+
+  // email format
+  const emailOk = /^[\w.+-]+@[\w-]+\.[\w.-]+$/.test((p.email||"").trim());
+  checks.push({
+    status: !p.email ? "warn" : (emailOk?"pass":"fail"),
+    title:"Email format",
+    desc: !p.email ? "No email provided yet." : (emailOk? "Email looks valid and parseable." : "Email format may not be machine-readable — double check it.")
+  });
+
+  // summary
+  const summaryWords = (state.summary||"").trim().split(/\s+/).filter(Boolean).length;
+  checks.push({
+    status: summaryWords===0?"fail": (summaryWords<25||summaryWords>110?"warn":"pass"),
+    title:"Summary length",
+    desc: summaryWords===0? "Add a short professional summary at the top of your resume." : `${summaryWords} words — ${summaryWords<25?"a bit short, add more detail.":summaryWords>110?"a bit long, tighten it up.":"a solid length."}`
+  });
+
+  // skills
+  const skillCount = state.skills.reduce((n,s)=> n + (s.items? s.items.split(",").filter(x=>x.trim()).length:0),0);
+  checks.push({
+    status: skillCount===0?"fail":(skillCount<6?"warn":"pass"),
+    title:"Skills coverage",
+    desc: skillCount===0? "No skills listed — add relevant hard skills and tools." : `${skillCount} individual skills listed across ${state.skills.length} categories.`
+  });
+
+  // experience dates
+  const expEntries = state.experience.filter(x=>x.company||x.role);
+  const missingDates = expEntries.filter(x=>!x.start || (!x.end && !x.current));
+  checks.push({
+    status: expEntries.length===0?"fail": (missingDates.length? "warn":"pass"),
+    title:"Experience dates",
+    desc: expEntries.length===0? "Add at least one work experience entry." : (missingDates.length? `${missingDates.length} role(s) missing a start or end date.` : "All roles include clear start/end dates.")
+  });
+
+  // bullets per role
+  const thin = expEntries.filter(x=> (x.bullets||"").split("\n").filter(Boolean).length < 2);
+  checks.push({
+    status: expEntries.length===0? "fail" : (thin.length? "warn":"pass"),
+    title:"Achievement bullets",
+    desc: expEntries.length===0? "No experience entries yet." : (thin.length? `${thin.length} role(s) have fewer than 2 bullet points — add measurable achievements.` : "Each role has solid bullet detail.")
+  });
+
+  // quantified results
+  const bulletText = expEntries.map(x=>x.bullets||"").join(" ");
+  const hasNumbers = /\d/.test(bulletText);
+  checks.push({
+    status: expEntries.length===0? "fail": (hasNumbers?"pass":"warn"),
+    title:"Quantified impact",
+    desc: hasNumbers? "Your bullets include numbers/metrics — great for showing impact." : "Add numbers (%, $, time saved, team size) to your bullet points to strengthen impact."
+  });
+
+  // layout / ATS-safety of template
+  const activeTpl = TEMPLATES[state.meta.template] || TEMPLATES["single__minimal"];
+  const sidebarRisk = activeTpl.layout.startsWith("sidebar");
+  checks.push({
+    status: sidebarRisk? "warn":"pass",
+    title:"Layout parseability",
+    desc: sidebarRisk? "Sidebar layouts can occasionally be misread by older ATS parsers — a single-column or centered template is safest for strict ATS screens. (Your downloaded PDF always uses a safe single-column layout regardless of this choice.)" : "Single-column layout — safe for all major ATS parsers."
+  });
+
+  // education
+  checks.push({
+    status: state.education.some(x=>x.school||x.degree) ? "pass":"warn",
+    title:"Education section",
+    desc: state.education.some(x=>x.school||x.degree) ? "Education details are present." : "Consider adding your education, even briefly."
+  });
+
+  const weights={pass:1, warn:0.5, fail:0};
+  const raw = checks.reduce((s,c)=>s+weights[c.status],0);
+  const score = Math.round((raw/checks.length)*100);
+
+  return {checks, score};
+}
+
+function keywordSignal(){
+  const text = [
+    state.summary,
+    state.skills.map(s=>s.items).join(" "),
+    state.experience.map(x=>x.bullets).join(" ")
+  ].join(" ").toLowerCase();
+  const words = text.replace(/[^a-z0-9+#. ]/g," ").split(/\s+/).filter(w=> w.length>2 && !STOPWORDS.has(w));
+  const freq={};
+  words.forEach(w=> freq[w]=(freq[w]||0)+1);
+  return Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,14);
+}
+
+/* No hue in this build, so the dial reads its score as brightness:
+   a strong score burns white, a weak one stays dim. */
+function scoreColor(score){
+  if(score>=80) return "var(--ok)";
+  if(score>=55) return "var(--warn)";
+  return "var(--bad)";
+}
+
+function renderATS(){
+  const {checks, score} = computeATS();
+
+  // top badge
+  document.getElementById("topAtsRing").style.setProperty("--pct", score);
+  document.getElementById("topAtsRing").style.background = `conic-gradient(${scoreColor(score)} calc(${score}*1%), rgba(255,255,255,.12) 0)`;
+  document.getElementById("topAtsScore").textContent = score;
+  document.getElementById("topAtsLabel").textContent = score>=80?"Strong":score>=55?"Needs work":"Weak";
+
+  // ATS tab dial
+  const dial = document.getElementById("atsDial");
+  dial.style.setProperty("--pct", score);
+  dial.style.setProperty("--score-color", scoreColor(score));
+  document.getElementById("atsDialScore").textContent = score;
+  document.getElementById("atsHeroTitle").textContent = score>=80? "Looking strong" : score>=55? "Getting there" : "Needs attention";
+  const failCount = checks.filter(c=>c.status==="fail").length;
+  const warnCount = checks.filter(c=>c.status==="warn").length;
+  document.getElementById("atsHeroDesc").textContent = failCount||warnCount
+    ? `${failCount} critical issue${failCount!==1?"s":""}, ${warnCount} suggestion${warnCount!==1?"s":""} found below.`
+    : "All checks passed — your resume is in great shape.";
+
+  // worst first, so the top of the list is always the next thing to fix
+  const RANK = {fail:0, warn:1, pass:2};
+  const ordered = checks.slice().sort((a,b)=> RANK[a.status] - RANK[b.status]);
+  const TAG = {fail:'<span class="fix-tag now">Fix first</span>', warn:'<span class="fix-tag next">Improve</span>', pass:""};
+  const GLYPH = {pass:"\u2713", warn:"!", fail:"\u2715"};
+
+  document.getElementById("atsChecklist").innerHTML = ordered.map(c=>`
+    <div class="check-item is-${c.status}">
+      <div class="check-icon ${c.status}">${GLYPH[c.status]}</div>
+      <div class="check-text">
+        <div class="check-head"><b>${c.title}</b>${TAG[c.status]}</div>
+        <p>${c.desc}</p>
+      </div>
+    </div>
+  `).join("");
+
+  const kws = keywordSignal();
+  document.getElementById("kwTags").innerHTML = kws.length
+    ? kws.map(([w,c])=>`<span class="kw-tag">${esc(w)} <b>×${c}</b></span>`).join("")
+    : `<span class="hint">Add skills and experience bullets to see keyword signal.</span>`;
+}
+
+/* ============================================================
+   11. FULL RENDER CYCLE
+   ============================================================ */
+function syncDownloadLabel(){
+  const el = document.querySelector("#btnDownload .btn-txt");
+  if(el) el.textContent = state.meta.doc === "letter" ? "Download letter" : "Download PDF";
+}
+
+function updateTabsFade(){
+  const t = document.querySelector(".tabs");
+  if(!t) return;
+  t.classList.toggle("is-scrollable", t.scrollWidth > t.clientWidth + 1);
+}
+
+function renderAll(){
+  syncDownloadLabel();
+  updateTabsFade();
+  renderTemplateChips();
+  renderTemplateGrid();
+  renderSizeControls();
+  renderColorSwatches();
+  renderFontOptions();
+  renderSegControls();
+  renderOrderList();
+  renderAllListEditors();
+  syncPersonalInputs();
+  renderPreview();
+  renderATS();
+}
+
+function syncPersonalInputs(){
+  document.querySelectorAll('[data-path]').forEach(el=>{
+    const val = getByPath(state, el.dataset.path);
+    el.value = val || "";
+  });
+  document.querySelectorAll('[data-lpath]').forEach(el=>{
+    el.value = state.letter[el.dataset.lpath] || "";
+  });
+  const hdr = document.getElementById("letterHeaderToggle");
+  if(hdr) hdr.checked = !!state.letter.showHeader;
+  document.querySelectorAll("#docSeg button").forEach(b=>{
+    b.classList.toggle("active", b.dataset.doc === state.meta.doc);
+  });
+}
+
+/* ============================================================
+   12. EVENT WIRING
+   ============================================================ */
+
+// -- Tabs
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("panel-"+btn.dataset.tab).classList.add("active");
+    activeTab = btn.dataset.tab;
+    if(activeTab==="ats") renderATS();
+  });
+});
+
+// -- top-level personal/summary fields (data-path)
+document.getElementById("panel-content").addEventListener("input", (e)=>{
+  const el = e.target;
+  if(el.dataset.path){
+    setByPath(state, el.dataset.path, el.value);
+    renderPreview();
+    scheduleSave();
+  }
+});
+
+// -- dynamic list field edits (skills/experience/education/projects)
+document.getElementById("panel-content").addEventListener("input", (e)=>{
+  const el = e.target;
+  if(el.dataset.list){
+    const listName = el.dataset.list;
+    const id = el.dataset.id;
+    const key = el.dataset.key;
+    const arr = state[listName];
+    const item = arr.find(x=>x.id===id);
+    if(!item) return;
+    if(el.dataset.bool){
+      item[key] = el.checked;
+      if(key==="current" && el.checked){ item.end=""; renderExperienceEditor(); }
+    } else {
+      item[key] = el.value;
+    }
+    renderPreview();
+    renderATS();
+    scheduleSave();
+  }
+});
+document.getElementById("panel-content").addEventListener("change", (e)=>{
+  const el = e.target;
+  if(el.dataset.bool){
+    const arr = state[el.dataset.list];
+    const item = arr.find(x=>x.id===el.dataset.id);
+    if(item){ item[el.dataset.key] = el.checked; if(el.dataset.key==="current" && el.checked) item.end=""; }
+    renderExperienceEditor();
+    renderPreview();
+    scheduleSave();
+  }
+});
+
+// -- add entry buttons
+document.querySelectorAll("[data-add]").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const type = btn.dataset.add;
+    if(type==="skills") state.skills.push({id:uid(), category:"", items:""});
+    if(type==="experience") state.experience.push({id:uid(), company:"", role:"", location:"", start:"", end:"", current:false, bullets:""});
+    if(type==="education") state.education.push({id:uid(), school:"", degree:"", location:"", start:"", end:"", details:""});
+    if(type==="projects") state.projects.push({id:uid(), name:"", tech:"", link:"", description:""});
+    renderAllListEditors();
+    renderPreview();
+    renderATS();
+    scheduleSave();
+  });
+});
+
+// -- remove entry (delegated)
+document.getElementById("panel-content").addEventListener("click",(e)=>{
+  const rm = e.target.closest("[data-remove]");
+  if(rm){
+    const listName = rm.dataset.remove;
+    state[listName] = state[listName].filter(x=>x.id!==rm.dataset.id);
+    renderAllListEditors();
+    renderPreview();
+    renderATS();
+    scheduleSave();
+    return;
+  }
+  const mv = e.target.closest("[data-move-entry]");
+  if(mv){
+    const listName = mv.dataset.moveEntry;
+    const dir = mv.dataset.dir;
+    const arr = state[listName];
+    const idx = arr.findIndex(x=>x.id===mv.dataset.id);
+    const swapWith = dir==="up"? idx-1: idx+1;
+    if(swapWith<0 || swapWith>=arr.length) return;
+    [arr[idx],arr[swapWith]] = [arr[swapWith],arr[idx]];
+    renderAllListEditors();
+    renderPreview();
+    scheduleSave();
+  }
+});
+
+// -- section order up/down
+document.getElementById("orderList").addEventListener("click",(e)=>{
+  const sz = e.target.closest("[data-scale]");
+  if(sz){
+    const key = sz.dataset.key;
+    const step = sz.dataset.scale === "up" ? 0.05 : -0.05;
+    state.meta.sectionScale[key] = clampScale((state.meta.sectionScale[key] || 1) + step);
+    renderOrderList(); renderPreview(); scheduleSave();
+    return;
+  }
+  const btn = e.target.closest("[data-move]");
+  if(!btn) return;
+  const idx = parseInt(btn.dataset.idx,10);
+  const dir = btn.dataset.move;
+  const swapWith = dir==="up"? idx-1: idx+1;
+  if(swapWith<0 || swapWith>=state.sectionOrder.length) return;
+  [state.sectionOrder[idx], state.sectionOrder[swapWith]] = [state.sectionOrder[swapWith], state.sectionOrder[idx]];
+  renderOrderList();
+  renderPreview();
+  scheduleSave();
+});
+
+// -- Design tab: template select
+document.getElementById("templateGrid").addEventListener("click",(e)=>{
+  const card = e.target.closest("[data-template]");
+  if(!card) return;
+  state.meta.template = card.dataset.template;
+  renderTemplateGrid();
+  renderPreview();
+  renderATS();
+  scheduleSave();
+});
+
+// -- color swatches
+document.getElementById("colorSwatches").addEventListener("click",(e)=>{
+  const sw = e.target.closest("[data-color]");
+  if(!sw) return;
+  state.meta.color = sw.dataset.color;
+  renderColorSwatches();
+  renderPreview();
+  scheduleSave();
+});
+
+// -- font options
+document.getElementById("fontOptions").addEventListener("click",(e)=>{
+  const opt = e.target.closest("[data-font]");
+  if(!opt) return;
+  state.meta.font = opt.dataset.font;
+  renderFontOptions();
+  renderPreview();
+  scheduleSave();
+});
+
+// -- density / divider segments
+document.getElementById("densitySeg").addEventListener("click",(e)=>{
+  const b = e.target.closest("button"); if(!b) return;
+  state.meta.density = b.dataset.val;
+  // a preset is just a bundle of slider positions
+  state.meta.custom = Object.assign({}, DENSITY_PRESETS[b.dataset.val] || SIZE_DEFAULTS);
+  renderSegControls(); renderSizeControls(); renderPreview(); scheduleSave();
+});
+document.getElementById("dividerSeg").addEventListener("click",(e)=>{
+  const b = e.target.closest("button"); if(!b) return;
+  state.meta.divider = b.dataset.val;
+  renderSegControls(); renderPreview(); scheduleSave();
+});
+
+// -- cover letter fields
+document.getElementById("panel-letter").addEventListener("input",(e)=>{
+  const el = e.target.closest("[data-lpath]");
+  if(!el) return;
+  state.letter[el.dataset.lpath] = el.value;
+  if(state.meta.doc === "letter") renderPreview();
+  scheduleSave();
+});
+document.getElementById("letterHeaderToggle").addEventListener("change",(e)=>{
+  state.letter.showHeader = e.target.checked;
+  if(state.meta.doc === "letter") renderPreview();
+  scheduleSave();
+});
+
+document.getElementById("letterStarter").addEventListener("click", ()=>{
+  const L = state.letter;
+  const role = (L.role||"the role").trim() || "the role";
+  const company = (L.company||"your team").trim() || "your team";
+  const title = state.personal.title || "my current role";
+  L.body = [
+    `I'm writing to apply for ${role} at ${company}. I've spent the last several years as ${title}, and the problems described in the posting are the ones I've been working on daily.`,
+    `In my current role I've [describe the result you're proudest of, with a number attached]. Before that I [second proof point — a shipped thing, a team you led, a metric you moved]. Both came down to [the skill the job posting cares most about].`,
+    `What draws me to ${company} specifically is [the concrete reason — a product decision, a market, something you've read or used]. I'd bring the same [strength] to it.`,
+    `I'd welcome the chance to talk. Thank you for your time.`
+  ].join("\n\n");
+  if(!L.signoff) L.signoff = "Sincerely,";
+  state.meta.doc = "letter";      // set first so the toolbar syncs with it
+  syncPersonalInputs();
+  syncDownloadLabel();
+  renderPreview();
+  scheduleSave();
+  showToast("Starter draft added — replace the bracketed prompts.");
+});
+
+// -- switch between the resume and the letter
+document.getElementById("docSeg").addEventListener("click",(e)=>{
+  const b = e.target.closest("[data-doc]"); if(!b) return;
+  state.meta.doc = b.dataset.doc;
+  document.querySelectorAll("#docSeg button").forEach(x=>x.classList.toggle("active", x===b));
+  renderPreview();
+  syncDownloadLabel();
+  scheduleSave();
+});
+
+document.getElementById("paperSeg").addEventListener("click",(e)=>{
+  const b = e.target.closest("button"); if(!b) return;
+  state.meta.paper = b.dataset.val;
+  renderSegControls();
+  renderPreview();
+  zoomMode === "fit" ? fitZoom() : applyZoom();
+  scheduleSave();
+});
+
+// -- template search + filter chips
+const tplSearch = document.getElementById("tplSearch");
+if(tplSearch){
+  tplSearch.addEventListener("input", ()=>{
+    tplFilter.q = tplSearch.value;
+    renderTemplateGrid();
+  });
+}
+document.getElementById("tplLayoutChips").addEventListener("click",(e)=>{
+  const c = e.target.closest("[data-layout]"); if(!c) return;
+  tplFilter.layout = c.dataset.layout;
+  renderTemplateChips(); renderTemplateGrid();
+});
+document.getElementById("tplSkinChips").addEventListener("click",(e)=>{
+  const c = e.target.closest("[data-skin]"); if(!c) return;
+  tplFilter.skin = c.dataset.skin;
+  renderTemplateChips(); renderTemplateGrid();
+});
+
+// -- size sliders: live, no re-render of the editor
+document.getElementById("sizeSliders").addEventListener("input",(e)=>{
+  const input = e.target.closest("[data-size]"); if(!input) return;
+  const key = input.dataset.size;
+  state.meta.custom[key] = clampSize(key, parseFloat(input.value));
+  const label = document.getElementById(input.id+"Val");
+  if(label) label.textContent = SIZE_FORMAT[key](state.meta.custom[key]);
+  renderPreview();
+  scheduleSave();
+});
+
+document.getElementById("resetSizing").addEventListener("click", ()=>{
+  state.meta.custom = Object.assign({}, DENSITY_PRESETS[state.meta.density] || SIZE_DEFAULTS);
+  renderSizeControls(); renderPreview(); scheduleSave();
+  showToast("Sizes reset to the "+state.meta.density+" preset.");
+});
+
+// -- ATS badge click -> jump to ATS tab
+document.getElementById("atsBadgeBtn").addEventListener("click", ()=>{
+  document.querySelector('.tab-btn[data-tab="ats"]').click();
+});
+
+/* ============================================================
+   13. IMPORT MODAL + PARSER
+   ============================================================ */
+const importModal = document.getElementById("importModal");
+document.getElementById("btnImport").addEventListener("click", ()=> importModal.classList.add("open"));
+document.getElementById("closeImport").addEventListener("click", ()=> importModal.classList.remove("open"));
+document.getElementById("cancelImport").addEventListener("click", ()=> importModal.classList.remove("open"));
+importModal.addEventListener("click",(e)=>{ if(e.target===importModal) importModal.classList.remove("open"); });
+
+if(window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js";
+}
+
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+dropzone.addEventListener("click", ()=> fileInput.click());
+dropzone.addEventListener("dragover",(e)=>{ e.preventDefault(); dropzone.style.borderColor="var(--accent)"; });
+dropzone.addEventListener("dragleave",()=>{ dropzone.style.borderColor=""; });
+dropzone.addEventListener("drop",(e)=>{
+  e.preventDefault(); dropzone.style.borderColor="";
+  const f = e.dataTransfer.files[0];
+  if(f) handleImportFile(f);
+});
+fileInput.addEventListener("change",()=>{
+  if(fileInput.files[0]) handleImportFile(fileInput.files[0]);
+});
+
+function handleImportFile(file){
+  const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+  if(isPdf) readPdfFile(file); else readTextFile(file);
+}
+
+function readTextFile(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{ document.getElementById("importText").value = reader.result; };
+  reader.onerror = ()=> showToast("Couldn't read that file.", true);
+  reader.readAsText(file);
+}
+
+async function readPdfFile(file){
+  const textarea = document.getElementById("importText");
+  if(!window.pdfjsLib){ showToast("PDF reader failed to load — check your connection.", true); return; }
+  textarea.value = "Extracting text from PDF…";
+  try{
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let fullText = "";
+    for(let i=1; i<=pdf.numPages; i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      let lastY = null, line = "";
+      content.items.forEach(item=>{
+        const y = Math.round(item.transform[5]);
+        if(lastY!==null && Math.abs(y-lastY) > 2){
+          fullText += line.trim() + "\n";
+          line = "";
+        }
+        line += item.str + " ";
+        lastY = y;
+      });
+      fullText += line.trim() + "\n\n";
+    }
+    textarea.value = fullText.trim();
+    if(!fullText.trim()){
+      showToast("Couldn't find selectable text in that PDF — it may be a scanned image.", true);
+    } else {
+      showToast("PDF text extracted — review below, then parse.");
+    }
+  }catch(err){
+    textarea.value = "";
+    showToast("Couldn't read that PDF file.", true);
+  }
+}
+
+document.getElementById("runParse").addEventListener("click", ()=>{
+  const text = document.getElementById("importText").value;
+  if(!text.trim()){ showToast("Paste or upload some resume text first.", true); return; }
+  const result = parseResumeText(text);
+  applyParsedResult(result);
+  const summaryEl = document.getElementById("parseSummary");
+  summaryEl.classList.add("show");
+  summaryEl.innerHTML = `<b>Parsed successfully.</b> Filled in: ${result._filled.join(", ") || "basic fields"}. Please review each field — auto-parsing is best-effort and dates/entries may need light cleanup.`;
+  renderAll();
+  showToast("Old CV imported — review the Content tab.");
+  setTimeout(()=> importModal.classList.remove("open"), 900);
+});
+
+function parseResumeText(text){
+  const lines = text.split(/\r?\n/).map(l=>l.replace(/\t/g," ").trim());
+  const nonEmpty = lines.filter(Boolean);
+  const filled = [];
+  const out = {};
+
+  // contact
+  const emailMatch = text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
+  if(emailMatch){ out.email = emailMatch[0]; filled.push("email"); }
+  const phoneMatch = text.match(/(\+?\d[\d .()-]{7,}\d)/);
+  if(phoneMatch){ out.phone = phoneMatch[0].trim(); filled.push("phone"); }
+  const liMatch = text.match(/((https?:\/\/)?(www\.)?linkedin\.com\/[^\s,)]+)/i);
+  if(liMatch){ out.linkedin = liMatch[0]; filled.push("linkedin"); }
+  const urlMatches = text.match(/((https?:\/\/)?(www\.)?[a-z0-9-]+\.(com|io|dev|net|me|org|co)(\/[^\s,)]*)?)/gi) || [];
+  const site = urlMatches.find(u=> !/linkedin\.com/i.test(u) && !(emailMatch && u.includes(emailMatch[0])));
+  if(site){ out.website = site; filled.push("website"); }
+  const locMatch = text.slice(0,500).match(/\b[A-Z][a-zA-Z.]+(?: [A-Z][a-zA-Z.]+)?,\s?[A-Z]{2}\b/);
+  if(locMatch){ out.location = locMatch[0].trim(); filled.push("location"); }
+
+  // name = first short line without @ or digits-heavy
+  const nameLine = nonEmpty.find(l=> l.length<60 && !/[@\d]{3,}/.test(l) && !/linkedin|http/i.test(l));
+  if(nameLine){ out.name = nameLine.replace(/[|,]+$/,""); filled.push("name"); }
+  const nameIdx = nameLine? nonEmpty.indexOf(nameLine) : -1;
+  const titleLine = nonEmpty[nameIdx+1];
+  if(titleLine && titleLine.length<70 && !/@/.test(titleLine) && !emailMatch?.[0]?.includes(titleLine)){
+    out.title = titleLine;
+    filled.push("title");
+  }
+
+  // section split
+  const headerPatterns = {
+    summary:/^(professional\s+)?(summary|profile|objective|about me?)\s*:?$/i,
+    skills:/^(technical\s+|core\s+)?skills( & competencies)?\s*:?$/i,
+    experience:/^(work\s+|professional\s+|employment\s+)?experience\s*:?$/i,
+    education:/^education(al background)?\s*:?$/i,
+    projects:/^(personal\s+)?projects\s*:?$/i
+  };
+  let currentKey=null, buffer=[];
+  const sections={};
+  lines.forEach(line=>{
+    let matched=null;
+    for(const key in headerPatterns){ if(headerPatterns[key].test(line)){ matched=key; break; } }
+    if(matched){
+      if(currentKey) sections[currentKey]=buffer.join("\n").trim();
+      currentKey=matched; buffer=[];
+    } else if(currentKey){
+      buffer.push(line);
+    }
+  });
+  if(currentKey) sections[currentKey]=buffer.join("\n").trim();
+
+  if(sections.summary){ out.summary = sections.summary.replace(/\n+/g," ").trim(); filled.push("summary"); }
+
+  if(sections.skills){
+    const skillLines = sections.skills.split("\n").map(l=>l.trim()).filter(Boolean);
+    const cats = [];
+    skillLines.forEach(l=>{
+      const m = l.match(/^([A-Za-z &/]{2,30}):\s*(.+)$/);
+      if(m) cats.push({id:uid(), category:m[1].trim(), items:m[2].trim()});
+      else cats.push({id:uid(), category:"", items:l.replace(/^[-•*]\s*/,"")});
+    });
+    if(cats.length){ out.skills = cats; filled.push("skills"); }
+  }
+
+  if(sections.experience){
+    const blocks = sections.experience.split(/\n\s*\n/).filter(Boolean);
+    const entries = blocks.map(block=>{
+      const blines = block.split("\n").map(l=>l.trim()).filter(Boolean);
+      if(!blines.length) return null;
+      const header = blines[0];
+      const dateLineIdx = blines.findIndex(l=>/\d{4}/.test(l));
+      const dateLine = dateLineIdx>=0? blines[dateLineIdx] : "";
+      const dateRange = dateLine.match(/([A-Za-z]{3,9}\.?\s?\d{4}|\d{4})\s*[-–—]\s*(Present|Current|[A-Za-z]{3,9}\.?\s?\d{4}|\d{4})/i);
+      let start="", end="", current=false;
+      if(dateRange){
+        start = toMonthValue(dateRange[1]);
+        if(/present|current/i.test(dateRange[2])) current=true; else end = toMonthValue(dateRange[2]);
+      }
+      let role="", company="";
+      const sep = header.match(/^(.+?)\s*(?:—|–|-|@|\|,|,)\s*(.+)$/);
+      if(sep){ role = sep[1].trim(); company = sep[2].trim(); }
+      else { role = header; }
+      company = company.replace(/\d{4}.*/,"").trim();
+      const bulletLines = blines.slice(1).filter(l=> /^[-•*]/.test(l)).map(l=>l.replace(/^[-•*]\s*/,""));
+      return {id:uid(), company, role, location:"", start, end, current, bullets:bulletLines.join("\n")};
+    }).filter(Boolean);
+    if(entries.length){ out.experience = entries; filled.push("experience"); }
+  }
+
+  if(sections.education){
+    const blocks = sections.education.split(/\n\s*\n/).filter(Boolean);
+    const entries = blocks.map(block=>{
+      const blines = block.split("\n").map(l=>l.trim()).filter(Boolean);
+      if(!blines.length) return null;
+      const header = blines[0];
+      const yearMatch = block.match(/(\d{4})\D{1,5}(\d{4}|present)/i);
+      const sep = header.match(/^(.+?)\s*(?:—|–|-|,)\s*(.+)$/);
+      let degree="", school="";
+      if(sep){ degree = sep[1].trim(); school = sep[2].replace(/\d{4}.*/,"").trim(); }
+      else { school = header; }
+      return {id:uid(), school, degree, location:"", start: yearMatch? yearMatch[1]:"", end: yearMatch? yearMatch[2]:"", details: blines.slice(1).join(" ")};
+    }).filter(Boolean);
+    if(entries.length){ out.education = entries; filled.push("education"); }
+  }
+
+  if(sections.projects){
+    const blocks = sections.projects.split(/\n\s*\n/).filter(Boolean);
+    const entries = blocks.map(block=>{
+      const blines = block.split("\n").map(l=>l.trim()).filter(Boolean);
+      if(!blines.length) return null;
+      const header = blines[0];
+      const nameMatch = header.split(/\s*[-–—|]\s*/);
+      return {id:uid(), name:nameMatch[0], tech:"", link:"", description: blines.slice(1).map(l=>l.replace(/^[-•*]\s*/,"")).join("\n")};
+    }).filter(Boolean);
+    if(entries.length){ out.projects = entries; filled.push("projects"); }
+  }
+
+  out._filled = filled;
+  return out;
+}
+
+function toMonthValue(str){
+  if(/^\d{4}$/.test(str)) return str+"-01";
+  const m = str.match(/([A-Za-z]{3,9})\.?\s?(\d{4})/);
+  if(!m) return "";
+  const months=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+  const idx = months.findIndex(mo=> m[1].toLowerCase().startsWith(mo));
+  if(idx<0) return "";
+  return m[2]+"-"+String(idx+1).padStart(2,"0");
+}
+
+function applyParsedResult(r){
+  if(r.name) state.personal.name = r.name;
+  if(r.title) state.personal.title = r.title;
+  if(r.email) state.personal.email = r.email;
+  if(r.phone) state.personal.phone = r.phone;
+  if(r.location) state.personal.location = r.location;
+  if(r.linkedin) state.personal.linkedin = r.linkedin;
+  if(r.website) state.personal.website = r.website;
+  if(r.summary) state.summary = r.summary;
+  if(r.skills && r.skills.length) state.skills = r.skills;
+  if(r.experience && r.experience.length) state.experience = r.experience;
+  if(r.education && r.education.length) state.education = r.education;
+  if(r.projects && r.projects.length) state.projects = r.projects;
+  scheduleSave();
+}
+
+/* ============================================================
+   14. SAVE / LOAD JSON
+   ============================================================ */
+document.getElementById("btnSaveJson").addEventListener("click", ()=>{
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const fname = (state.personal.name||"resume").trim().replace(/\s+/g,"_").toLowerCase();
+  a.href = url; a.download = fname + "_resume_data.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  showToast("Resume data saved as JSON.");
+});
+
+document.getElementById("btnLoadJson").addEventListener("click", ()=> document.getElementById("loadJsonInput").click());
+document.getElementById("loadJsonInput").addEventListener("change",(e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const parsed = JSON.parse(reader.result);
+      if(!parsed.personal) throw new Error("bad format");
+      state = Object.assign(defaultState(), parsed);
+      renderAll();
+      scheduleSave();
+      showToast("Resume data loaded.");
+    }catch(err){
+      showToast("That file doesn't look like a valid resume JSON.", true);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
+/* ============================================================
+   15. DOWNLOAD PDF
+   Primary: jsPDF direct download — draws real, selectable text
+   (no rasterized canvas), so it works reliably regardless of
+   browser print-dialog / iframe restrictions, and stays ATS-safe.
+   Always uses a clean single-column layout for maximum ATS
+   compatibility, independent of the visual template on screen.
+   ============================================================ */
+function pickPdfFont(){
+  const tpl = TEMPLATES[state.meta.template] || TEMPLATES["single__minimal"];
+  if(tpl.skin==="tech") return "courier";
+  if(state.meta.font==="times") return "times";
+  if(["elegant","editorial","academic"].includes(tpl.skin)) return "times";
+  return "helvetica";
+}
+function hexToRgb(hex){
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m ? [parseInt(m[1],16),parseInt(m[2],16),parseInt(m[3],16)] : [30,30,30];
+}
+
+function generatePDF(){
+  if(!window.jspdf){ showToast("PDF engine failed to load — check your connection and try again.", true); return null; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:"pt", format: currentPaper().pdf });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 48;
+  const contentW = pageW - margin*2;
+  const font = pickPdfFont();
+  const theme = COLOR_THEMES[state.meta.color];
+  const accent = hexToRgb(theme.heading);
+  const muted = hexToRgb(theme.muted);
+  const ink = hexToRgb(theme.text);
+  const c = state.meta.custom;
+  // the on-screen page is set in px at 96dpi; a PDF point is 1/72in
+  const baseSize = Math.min(16, Math.max(7, c.fontSize * 0.75));
+  const lineGap = Math.min(2.1, Math.max(1.05, c.lineHeight * 0.92));
+  const headSize = baseSize * 1.12 * c.headingScale;
+  const nameSize = baseSize * c.nameScale * 0.95;
+
+  let y = margin;
+  function ensureSpace(needed){
+    if(y + needed > pageH - margin){ doc.addPage(); y = margin; }
+  }
+  function setColor(rgb){ doc.setTextColor(rgb[0],rgb[1],rgb[2]); }
+  function writeWrapped(text, size, opts){
+    opts = opts||{};
+    doc.setFont(font, opts.style||"normal");
+    doc.setFontSize(size);
+    setColor(opts.color||ink);
+    const maxW = opts.width || contentW;
+    const lines = doc.splitTextToSize(text, maxW);
+    lines.forEach(line=>{
+      ensureSpace(size*lineGap);
+      doc.text(line, opts.x!=null?opts.x:margin, y);
+      y += size*lineGap;
+    });
+    return lines.length;
+  }
+  function sectionHeading(title){
+    ensureSpace(headSize*2.2);
+    y += Math.max(3, c.sectionGap * 0.42);
+    doc.setFont(font,"bold");
+    doc.setFontSize(headSize);
+    setColor(accent);
+    doc.text(title.toUpperCase(), margin, y);
+    doc.setDrawColor(accent[0],accent[1],accent[2]);
+    doc.setLineWidth(1);
+    doc.line(margin, y+4, pageW-margin, y+4);
+    y += headSize + 5.5;
+  }
+
+  // ---- Header ----
+  const p = state.personal;
+  doc.setFont(font,"bold");
+  doc.setFontSize(nameSize);
+  setColor(accent);
+  doc.text(p.name || "Your Name", margin, y);
+  y += nameSize * 1.06;
+  if(p.title){
+    doc.setFont(font,"normal");
+    doc.setFontSize(baseSize * 1.2);
+    setColor(hexToRgb(theme.soft));
+    doc.text(p.title, margin, y);
+    y += baseSize * 1.55;
+  }
+  const contactBits = [p.email,p.phone,p.location,p.linkedin,p.website].filter(Boolean).join("   •   ");
+  if(contactBits){
+    doc.setFont(font,"normal");
+    doc.setFontSize(baseSize * 0.93);
+    setColor(muted);
+    const cLines = doc.splitTextToSize(contactBits, contentW);
+    cLines.forEach(l=>{ doc.text(l, margin, y); y += baseSize * 1.2; });
+  }
+  y += 6;
+  doc.setDrawColor(200,200,200);
+  doc.setLineWidth(1);
+  doc.line(margin, y, pageW-margin, y);
+  y += 18;
+
+  // ---- Sections (always single-column, ATS-safe order) ----
+  const renderers = {
+    summary(){
+      if(!state.summary || !state.summary.trim()) return;
+      sectionHeading("Summary");
+      writeWrapped(state.summary.trim(), baseSize, {color:ink});
+      y += 6;
+    },
+    skills(){
+      const items = state.skills.filter(s=>s.category||s.items);
+      if(!items.length) return;
+      sectionHeading("Skills");
+      items.forEach(s=>{
+        const line = s.category ? `${s.category}: ${s.items}` : s.items;
+        doc.setFont(font,"normal"); doc.setFontSize(baseSize); setColor(ink);
+        writeWrapped(line, baseSize, {color:ink});
+      });
+      y += 6;
+    },
+    experience(){
+      const items = state.experience.filter(x=>x.company||x.role);
+      if(!items.length) return;
+      sectionHeading("Work Experience");
+      items.forEach(x=>{
+        ensureSpace(baseSize*lineGap*2);
+        const dateStr = [fmtDate(x.start), x.current?"Present":fmtDate(x.end)].filter(Boolean).join(" – ");
+        const metaStr = [dateStr, x.location].filter(Boolean).join("  ·  ");
+        doc.setFont(font,"bold"); doc.setFontSize(baseSize+0.8); setColor(ink);
+        const titleLine = x.company ? `${x.role || ""}  ·  ${x.company}` : (x.role||"");
+        doc.text(titleLine, margin, y);
+        if(metaStr){
+          doc.setFont(font,"normal"); doc.setFontSize(baseSize-1); setColor(muted);
+          doc.text(metaStr, pageW-margin, y, {align:"right"});
+        }
+        y += baseSize*lineGap + 2;
+        const bullets = (x.bullets||"").split("\n").map(b=>b.trim()).filter(Boolean);
+        bullets.forEach(b=>{
+          const lines = doc.splitTextToSize(b, contentW-14);
+          lines.forEach((l,i)=>{
+            ensureSpace(baseSize*lineGap);
+            doc.setFont(font,"normal"); doc.setFontSize(baseSize); setColor(ink);
+            doc.text((i===0?"•  ":"    ")+l, margin+4, y);
+            y += baseSize*lineGap;
+          });
+        });
+        y += 6;
+      });
+    },
+    education(){
+      const items = state.education.filter(x=>x.school||x.degree);
+      if(!items.length) return;
+      sectionHeading("Education");
+      items.forEach(x=>{
+        ensureSpace(baseSize*lineGap*2);
+        const dateStr = [x.start,x.end].filter(Boolean).join(" – ");
+        const metaStr = [dateStr, x.location].filter(Boolean).join("  ·  ");
+        doc.setFont(font,"bold"); doc.setFontSize(baseSize+0.8); setColor(ink);
+        const titleLine = x.school ? `${x.degree||""}  ·  ${x.school}` : (x.degree||"");
+        doc.text(titleLine, margin, y);
+        if(metaStr){
+          doc.setFont(font,"normal"); doc.setFontSize(baseSize-1); setColor(muted);
+          doc.text(metaStr, pageW-margin, y, {align:"right"});
+        }
+        y += baseSize*lineGap + 2;
+        if(x.details){ writeWrapped(x.details, baseSize, {color:ink}); }
+        y += 6;
+      });
+    },
+    projects(){
+      const items = state.projects.filter(x=>x.name);
+      if(!items.length) return;
+      sectionHeading("Projects");
+      items.forEach(x=>{
+        ensureSpace(baseSize*lineGap*2);
+        doc.setFont(font,"bold"); doc.setFontSize(baseSize+0.8); setColor(ink);
+        doc.text(x.name, margin, y);
+        if(x.link){
+          doc.setFont(font,"normal"); doc.setFontSize(baseSize-1); setColor(muted);
+          doc.text(x.link, pageW-margin, y, {align:"right"});
+        }
+        y += baseSize*lineGap + 1;
+        if(x.tech){
+          doc.setFont(font,"italic"); doc.setFontSize(baseSize-1); setColor(hexToRgb(theme.soft));
+          doc.text(x.tech, margin, y);
+          y += baseSize*lineGap;
+        }
+        const bullets = (x.description||"").split("\n").map(b=>b.trim()).filter(Boolean);
+        bullets.forEach(b=>{
+          const lines = doc.splitTextToSize(b, contentW-14);
+          lines.forEach((l,i)=>{
+            ensureSpace(baseSize*lineGap);
+            doc.setFont(font,"normal"); doc.setFontSize(baseSize); setColor(ink);
+            doc.text((i===0?"•  ":"    ")+l, margin+4, y);
+            y += baseSize*lineGap;
+          });
+        });
+        y += 6;
+      });
+    }
+  };
+
+  state.sectionOrder.forEach(key=>{ if(renderers[key]) renderers[key](); });
+
+  return doc;
+}
+
+/* The letter as a PDF. Same paper, same ink, same font as the resume so the
+   two documents look like a set when they land in the same inbox. */
+function generateLetterPDF(){
+  if(!window.jspdf){ showToast("PDF engine failed to load — check your connection and try again.", true); return null; }
+  const { jsPDF } = window.jspdf;
+  const paper = currentPaper();
+  const doc = new jsPDF({ unit:"pt", format: paper.pdf });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 56;
+  const contentW = pageW - margin*2;
+
+  const font = pickPdfFont();
+  const theme = COLOR_THEMES[state.meta.color];
+  const accent = hexToRgb(theme.heading);
+  const muted = hexToRgb(theme.muted);
+  const ink = hexToRgb(theme.text);
+  const c = state.meta.custom;
+  const baseSize = Math.min(14, Math.max(8, c.fontSize * 0.75));
+  const lineGap = Math.min(2.1, Math.max(1.15, c.lineHeight * 0.98));
+
+  const L = state.letter;
+  const p = state.personal;
+  let y = margin;
+
+  function setColor(rgb){ doc.setTextColor(rgb[0],rgb[1],rgb[2]); }
+  function ensureSpace(n){ if(y + n > pageH - margin){ doc.addPage(); y = margin; } }
+  function write(text, size, opts){
+    opts = opts || {};
+    doc.setFont(font, opts.style||"normal");
+    doc.setFontSize(size);
+    setColor(opts.color||ink);
+    doc.splitTextToSize(text, opts.width||contentW).forEach(line=>{
+      ensureSpace(size*lineGap);
+      doc.text(line, margin, y);
+      y += size*lineGap;
+    });
+  }
+
+  if(L.showHeader){
+    doc.setFont(font,"bold");
+    doc.setFontSize(baseSize * c.nameScale * 0.8);
+    setColor(accent);
+    doc.text(p.name || "Your Name", margin, y);
+    y += baseSize * c.nameScale * 0.85;
+    if(p.title){ write(p.title, baseSize*1.1, {color:hexToRgb(theme.soft)}); }
+    const bits = [p.email,p.phone,p.location,p.linkedin,p.website].filter(Boolean).join("   •   ");
+    if(bits) write(bits, baseSize*0.9, {color:muted});
+    y += 6;
+    doc.setDrawColor(accent[0],accent[1],accent[2]);
+    doc.setLineWidth(1);
+    doc.line(margin, y, pageW-margin, y);
+    y += baseSize * 2;
+  }
+
+  write(letterDate(), baseSize*0.95, {color:muted});
+  y += baseSize;
+
+  if(L.recipient) write(L.recipient, baseSize, {style:"bold", color:ink});
+  [L.recipientTitle, L.company, L.address].filter(Boolean)
+    .forEach(line=> write(line, baseSize*0.96, {color:muted}));
+  if(L.recipient || L.recipientTitle || L.company || L.address) y += baseSize;
+
+  if(L.role){
+    write(`Re: ${L.role}${L.company ? " at "+L.company : ""}`, baseSize*1.02, {style:"bold", color:accent});
+    y += baseSize*0.7;
+  }
+
+  write(letterGreeting(), baseSize, {color:ink});
+  y += baseSize*0.6;
+
+  (L.body||"").split(/\n\s*\n/).map(s=>s.trim()).filter(Boolean).forEach(para=>{
+    write(para.replace(/\n/g," "), baseSize, {color:ink});
+    y += baseSize*0.75;
+  });
+
+  y += baseSize*0.8;
+  write(L.signoff || "Sincerely,", baseSize, {color:ink});
+  y += baseSize*2.1;
+  write((L.signature||"").trim() || p.name || "Your Name", baseSize, {style:"bold", color:accent});
+
+  return doc;
+}
+
+document.getElementById("btnDownload").addEventListener("click", ()=>{
+  const isLetter = state.meta.doc === "letter";
+  const doc = isLetter ? generateLetterPDF() : generatePDF();
+  if(!doc) return;
+  const fname = (state.personal.name||"document").trim().replace(/\s+/g,"_").toLowerCase();
+  doc.save(fname + (isLetter ? "_cover_letter.pdf" : "_resume.pdf"));
+  showToast(isLetter ? "Cover letter downloaded." : "Resume downloaded.");
+
+  /* The PDF is built entirely from `state` and never touches the on-screen
+     page, so the visible design can't actually change here — but browsers
+     vary in how a save dialog affects layout for a moment, which can make
+     the live preview look like it shifted. Re-asserting the preview and
+     its zoom right after guarantees what you see still matches what you
+     set, regardless of what the browser did in between. */
+  requestAnimationFrame(()=>{
+    renderPreview();
+    zoomMode === "fit" ? fitZoom() : applyZoom();
+  });
+});
+document.getElementById("btnPrint").addEventListener("click", ()=>{
+  window.print();
+});
+window.addEventListener("afterprint", ()=>{
+  renderPreview();
+  zoomMode === "fit" ? fitZoom() : applyZoom();
+});
+
+/* ============================================================
+   16. ZOOM CONTROLS
+   ============================================================ */
+function applyZoom(){
+  const page = document.getElementById("resume-page");
+  const wrap = page.parentElement;
+  page.style.transform = `scale(${zoom})`;
+  // a scaled element keeps its original box, so reserve the real space by hand
+  wrap.style.height = (page.offsetHeight * zoom) + "px";
+  wrap.style.width  = (currentPaper().w * zoom) + "px";
+  document.getElementById("zoomLabel").textContent = Math.round(zoom*100)+"%";
+}
+
+/* Scales the page down so it fits the pane — this is what makes the preview
+   readable on a 320px phone instead of vanishing off the right edge. */
+function fitZoom(){
+  const pane = document.querySelector(".preview-pane");
+  if(!pane || !pane.offsetWidth) return;
+  const styles = getComputedStyle(pane);
+  const avail = pane.clientWidth - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight);
+  // never magnify past actual size — a resume should read at 100% or smaller
+  zoom = Math.max(0.22, Math.min(1, avail / currentPaper().w));
+  applyZoom();
+}
+
+function setZoom(z){
+  zoomMode = "manual";
+  zoom = Math.max(0.22, Math.min(1.6, z));
+  applyZoom();
+}
+
+document.getElementById("zoomIn").addEventListener("click", ()=> setZoom(zoom+0.1));
+document.getElementById("zoomOut").addEventListener("click", ()=> setZoom(zoom-0.1));
+document.getElementById("zoomFit").addEventListener("click", ()=>{
+  zoomMode = "fit";
+  fitZoom();
+});
+
+/* A plain window "resize" listener also fires when a native file-save or
+   print dialog opens on some browsers/OSes, which used to make the preview
+   silently rescale right after a download — not the template changing, but
+   easy to mistake for it. Watching the pane itself, and ignoring anything
+   under a few pixels, filters that noise out while still catching a real
+   resize or an orientation change. */
+let lastFitWidth = null;
+let roTimer = null;
+const resizeObserver = new ResizeObserver(entries=>{
+  const w = entries[0].contentRect.width;
+  if(lastFitWidth !== null && Math.abs(w - lastFitWidth) < 6) return;
+  clearTimeout(roTimer);
+  roTimer = setTimeout(()=>{
+    lastFitWidth = w;
+    if(zoomMode === "fit") fitZoom(); else applyZoom();
+  }, 150);
+});
+resizeObserver.observe(document.querySelector(".preview-pane"));
+
+/* ============================================================
+   17. MOBILE TOGGLE
+   ============================================================ */
+const workspace = document.getElementById("workspace");
+const mobileToggle = document.getElementById("mobileToggle");
+mobileToggle.addEventListener("click", ()=>{
+  const showingPreview = workspace.classList.toggle("show-preview");
+  mobileToggle.textContent = showingPreview? "Edit" : "Preview";
+  // the pane had no width while hidden, so measure it now
+  if(showingPreview) requestAnimationFrame(()=>{ zoomMode === "fit" ? fitZoom() : applyZoom(); });
+});
+
+/* ============================================================
+   18. INIT
+   ============================================================ */
+renderAll();
+fitZoom();
+
+// Google Fonts load async — a serif/mono skin can reflow the page slightly
+// once its font actually arrives, which can shift the page count by one.
+if(document.fonts && document.fonts.ready){
+  document.fonts.ready.then(()=>{ updatePageGuide(); if(zoomMode==="fit") fitZoom(); });
+}
+
+})();
+</script>
+</body>
+</html>
